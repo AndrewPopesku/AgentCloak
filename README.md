@@ -134,6 +134,8 @@ If you don't need either, skip to [step 3](#3-configure-environment).
 
 > **Important:** Your app will be in **Testing** mode by default. This is fine — you do **not** need to publish or verify the app. Testing mode just limits sign-in to the test users you added above. If you skip adding test users, you'll get a "403: access_denied" error when trying to sign in.
 
+Gmail refresh tokens issued to an External app in Testing expire after seven days. Use **Re-authorize** on the connection when needed; basic Google sign-in alone is exempt. See [Google's refresh-token expiration rules](https://developers.google.com/identity/protocols/oauth2#expiration).
+
 **Create OAuth credentials:**
 
 11. Go to **APIs & Services > Credentials**.
