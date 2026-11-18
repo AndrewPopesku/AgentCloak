@@ -23,6 +23,11 @@ export class GmailProvider implements EmailProvider {
   private connectionId: string;
   private draftsEnabled: boolean;
   private markReadEnabled: boolean;
+  private requestCounter?: () => void;
+
+  setRequestCounter(counter: () => void): void {
+    this.requestCounter = counter;
+  }
 
   constructor(
     config: Config,
@@ -55,6 +60,7 @@ export class GmailProvider implements EmailProvider {
   }
 
   async search(options: SearchOptions): Promise<SearchResult> {
+    this.requestCounter?.();
     const res = await this.gmail.users.messages.list({
       userId: "me",
       q: options.query,
@@ -73,6 +79,7 @@ export class GmailProvider implements EmailProvider {
   }
 
   async getMessage(messageId: string): Promise<EmailMessage> {
+    this.requestCounter?.();
     const res = await this.gmail.users.messages.get({
       userId: "me",
       id: messageId,
@@ -85,6 +92,7 @@ export class GmailProvider implements EmailProvider {
     if (!this.markReadEnabled) {
       throw new Error("Marking Gmail read requires GMAIL_ALLOW_MARK_READ=true and Gmail reauthorization.");
     }
+    this.requestCounter?.();
     await this.gmail.users.messages.modify({
       userId: "me",
       id: messageId,
@@ -93,6 +101,7 @@ export class GmailProvider implements EmailProvider {
   }
 
   async listThreads(options: SearchOptions): Promise<ThreadListResult> {
+    this.requestCounter?.();
     const res = await this.gmail.users.threads.list({
       userId: "me",
       q: options.query,
@@ -104,6 +113,7 @@ export class GmailProvider implements EmailProvider {
     const threads: EmailThread[] = [];
 
     for (const t of threadIds) {
+      this.requestCounter?.();
       const threadRes = await this.gmail.users.threads.get({
         userId: "me",
         id: t.id!,
@@ -153,6 +163,7 @@ export class GmailProvider implements EmailProvider {
   async getThread(
     threadId: string,
   ): Promise<{ thread: EmailThread; messages: EmailMessage[] }> {
+    this.requestCounter?.();
     const res = await this.gmail.users.threads.get({
       userId: "me",
       id: threadId,
@@ -193,6 +204,7 @@ export class GmailProvider implements EmailProvider {
     ];
     const raw = Buffer.from(lines.join("\r\n")).toString("base64url");
 
+    this.requestCounter?.();
     const res = await this.gmail.users.drafts.create({
       userId: "me",
       requestBody: {
@@ -210,6 +222,7 @@ export class GmailProvider implements EmailProvider {
   }
 
   async listDrafts(maxResults?: number): Promise<DraftListResult> {
+    this.requestCounter?.();
     const res = await this.gmail.users.drafts.list({
       userId: "me",
       maxResults: maxResults ?? 10,
@@ -217,6 +230,7 @@ export class GmailProvider implements EmailProvider {
 
     const drafts: DraftInfo[] = [];
     for (const d of res.data.drafts ?? []) {
+      this.requestCounter?.();
       const detail = await this.gmail.users.drafts.get({
         userId: "me",
         id: d.id!,
@@ -247,10 +261,12 @@ export class GmailProvider implements EmailProvider {
   }
 
   async listLabels(): Promise<LabelInfo[]> {
+    this.requestCounter?.();
     const res = await this.gmail.users.labels.list({ userId: "me" });
     const labels: LabelInfo[] = [];
 
     for (const l of res.data.labels ?? []) {
+      this.requestCounter?.();
       const detail = await this.gmail.users.labels.get({
         userId: "me",
         id: l.id!,

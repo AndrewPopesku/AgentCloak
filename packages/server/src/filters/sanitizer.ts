@@ -22,6 +22,7 @@ export class SanitizerFilter implements EmailFilter {
 
   filter(message: EmailMessage): FilterResult {
     const sanitized = { ...message };
+    const htmlConverted = !!sanitized.htmlBody;
 
     // Convert HTML to plaintext if we have HTML
     if (sanitized.htmlBody) {
@@ -45,11 +46,17 @@ export class SanitizerFilter implements EmailFilter {
     delete sanitized.htmlBody;
 
     // Strip dangerous Unicode
-    sanitized.body = stripUnicode(sanitized.body);
-    sanitized.subject = stripUnicode(sanitized.subject);
-    sanitized.snippet = stripUnicode(sanitized.snippet);
+    let stripped = 0;
+    const strip = (value: string) => {
+      const result = stripUnicode(value);
+      stripped += [...value].length - [...result].length;
+      return result;
+    };
+    sanitized.body = strip(sanitized.body);
+    sanitized.subject = strip(sanitized.subject);
+    sanitized.snippet = strip(sanitized.snippet);
 
-    return { action: "pass", message: sanitized };
+    return { action: "pass", message: sanitized, trace: { htmlConverted, invisibleCharactersStripped: stripped } };
   }
 }
 

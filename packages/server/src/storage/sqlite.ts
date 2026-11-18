@@ -5,6 +5,8 @@ import { dirname } from "node:path";
 import { decryptPassword, encryptPassword } from "../providers/imap/crypto.js";
 import type {
   ConnectionCredentials,
+  ActivityEntry,
+  ActivityQuery,
   ConnectionStatus,
   Storage,
   StoredAccount,
@@ -14,7 +16,7 @@ import type {
   StoredSession,
 } from "./types.js";
 
-const CURRENT_SCHEMA_VERSION = 5;
+const CURRENT_SCHEMA_VERSION = 6;
 
 export class SqliteStorage implements Storage {
   private db: Database.Database;
@@ -59,7 +61,7 @@ export class SqliteStorage implements Storage {
     } else if (version === 4) {
       this.migrateFromV4ToV5();
     }
-    // version >= 5: already up to date
+    if (version < 6) this.migrateFromV5ToV6();
     if (this.credentialSecret) {
       const rows = this.db.prepare("SELECT id, tokens_json FROM email_connections WHERE provider = 'gmail'").all() as { id: string; tokens_json: string }[];
       const update = this.db.prepare("UPDATE email_connections SET tokens_json = ? WHERE id = ?");
@@ -160,7 +162,7 @@ export class SqliteStorage implements Storage {
         allowed_folders_json TEXT NOT NULL DEFAULT '[]'
       );
     `);
-    this.setSchemaVersion(CURRENT_SCHEMA_VERSION);
+    this.setSchemaVersion(5);
   }
 
   private migrateFromV1(): void {
@@ -355,7 +357,7 @@ export class SqliteStorage implements Storage {
       if (!columns.has("password_hash")) {
         this.db.exec("ALTER TABLE accounts ADD COLUMN password_hash TEXT");
       }
-      this.setSchemaVersion(CURRENT_SCHEMA_VERSION);
+      this.setSchemaVersion(4);
     });
 
     migrate();
@@ -384,6 +386,84 @@ export class SqliteStorage implements Storage {
       this.setSchemaVersion(5);
     })();
     console.log("Database migrated from v4 to v5 (allow duplicate email+provider)");
+  }
+
+  private migrateFromV5ToV6(): void {
+    this.db.transaction(() => {
+      this.db.exec(`
+        CREATE TABLE activity_log (
+          id TEXT PRIMARY KEY,
+          created_at INTEGER NOT NULL,
+          account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+          connection_id TEXT NOT NULL REFERENCES email_connections(id) ON DELETE CASCADE,
+          api_key_id TEXT,
+          api_key_name TEXT,
+          api_key_prefix TEXT,
+          tool_name TEXT NOT NULL,
+          arguments_json TEXT NOT NULL,
+          status TEXT NOT NULL,
+          duration_ms INTEGER NOT NULL,
+          provider_calls INTEGER NOT NULL,
+          returned_count INTEGER NOT NULL,
+          redacted_count INTEGER NOT NULL,
+          blocked_count INTEGER NOT NULL,
+          filter_trace_json TEXT NOT NULL,
+          response_text TEXT NOT NULL,
+          response_truncated INTEGER NOT NULL,
+          error_message TEXT
+        );
+        CREATE INDEX activity_log_created_at_idx ON activity_log(created_at DESC);
+        CREATE INDEX activity_log_account_created_idx ON activity_log(account_id, created_at DESC);
+        CREATE INDEX activity_log_connection_idx ON activity_log(connection_id);
+      `);
+      this.setSchemaVersion(CURRENT_SCHEMA_VERSION);
+    })();
+  }
+
+  async createActivity(entry: ActivityEntry): Promise<void> {
+    this.db.prepare(`INSERT INTO activity_log VALUES (${Array(19).fill("?").join(",")})`).run(
+      entry.id, entry.createdAt, entry.accountId, entry.connectionId, entry.apiKeyId,
+      entry.apiKeyName, entry.apiKeyPrefix, entry.toolName, entry.argumentsJson,
+      entry.status, entry.durationMs, entry.providerCalls, entry.returnedCount,
+      entry.redactedCount, entry.blockedCount, entry.filterTraceJson,
+      entry.responseText, Number(entry.responseTruncated), entry.errorMessage,
+    );
+  }
+
+  async listActivity(accountId: string, query: ActivityQuery): Promise<{ entries: ActivityEntry[]; total: number }> {
+    const conditions = ["account_id = ?"];
+    const args: (string | number)[] = [accountId];
+    if (query.connectionId) { conditions.push("connection_id = ?"); args.push(query.connectionId); }
+    if (query.toolName) { conditions.push("tool_name = ?"); args.push(query.toolName); }
+    if (query.status) { conditions.push("status = ?"); args.push(query.status); }
+    const where = conditions.join(" AND ");
+    const total = (this.db.prepare(`SELECT count(*) AS total FROM activity_log WHERE ${where}`).get(...args) as { total: number }).total;
+    const rows = this.db.prepare(`SELECT * FROM activity_log WHERE ${where} ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`).all(...args, query.limit, query.offset) as Record<string, unknown>[];
+    return { entries: rows.map((row) => this.rowToActivity(row)), total };
+  }
+
+  async getActivity(id: string, accountId: string): Promise<ActivityEntry | null> {
+    const row = this.db.prepare("SELECT * FROM activity_log WHERE id = ? AND account_id = ?").get(id, accountId) as Record<string, unknown> | undefined;
+    return row ? this.rowToActivity(row) : null;
+  }
+
+  async pruneActivity(before: number): Promise<number> {
+    return this.db.prepare("DELETE FROM activity_log WHERE created_at < ?").run(before).changes;
+  }
+
+  private rowToActivity(row: Record<string, unknown>): ActivityEntry {
+    return {
+      id: row.id as string, createdAt: row.created_at as number,
+      accountId: row.account_id as string, connectionId: row.connection_id as string,
+      apiKeyId: row.api_key_id as string | null, apiKeyName: row.api_key_name as string | null,
+      apiKeyPrefix: row.api_key_prefix as string | null, toolName: row.tool_name as string,
+      argumentsJson: row.arguments_json as string, status: row.status as ActivityEntry["status"],
+      durationMs: row.duration_ms as number, providerCalls: row.provider_calls as number,
+      returnedCount: row.returned_count as number, redactedCount: row.redacted_count as number,
+      blockedCount: row.blocked_count as number, filterTraceJson: row.filter_trace_json as string,
+      responseText: row.response_text as string, responseTruncated: !!row.response_truncated,
+      errorMessage: row.error_message as string | null,
+    };
   }
 
   // ── Accounts ──

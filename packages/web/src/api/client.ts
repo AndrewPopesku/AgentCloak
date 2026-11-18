@@ -1,4 +1,4 @@
-import type { Account, ApiKey, Connection, FilterConfig } from "./types";
+import type { Account, ApiKey, Connection, FilterConfig, ActivityEntry, ActivityDetail } from "./types";
 
 const BASE = "";
 
@@ -49,6 +49,9 @@ export const authApi = {
 
 export const api = {
   getMe: () => request<Account>("/api/me"),
+
+  listActivity: (params: URLSearchParams) => request<{ entries: ActivityEntry[]; total: number }>(`/api/activity?${params}`),
+  getActivity: (id: string) => request<ActivityDetail>(`/api/activity/${id}`),
 
   listConnections: () => request<Connection[]>("/api/connections"),
 

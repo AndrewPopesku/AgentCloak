@@ -14,6 +14,7 @@ vi.mock("../providers/gmail/oauth.js", async (importOriginal) => ({
 const config: Config = {
   host: "127.0.0.1", port: 3000, databasePath: ":memory:",
   baseUrl: "https://agentcloak.example", sessionSecret: "test-secret-that-is-at-least-32-characters",
+  activityLogEnabled: true, activityLogRetentionDays: 30,
   sessionMaxAge: 600_000, googleClientId: "test-client", googleClientSecret: "test-secret",
   googleRedirectUri: "https://agentcloak.example/auth/callback", gmailAllowDrafts: false, gmailAllowMarkRead: false,
 };

@@ -93,8 +93,42 @@ export interface StoredFilterConfig {
   allowedFolders: string[];
 }
 
+export interface ActivityEntry {
+  id: string;
+  createdAt: number;
+  accountId: string;
+  connectionId: string;
+  apiKeyId: string | null;
+  apiKeyName: string | null;
+  apiKeyPrefix: string | null;
+  toolName: string;
+  argumentsJson: string;
+  status: "ok" | "error" | "blocked";
+  durationMs: number;
+  providerCalls: number;
+  returnedCount: number;
+  redactedCount: number;
+  blockedCount: number;
+  filterTraceJson: string;
+  responseText: string;
+  responseTruncated: boolean;
+  errorMessage: string | null;
+}
+
+export interface ActivityQuery {
+  connectionId?: string;
+  toolName?: string;
+  status?: ActivityEntry["status"];
+  limit: number;
+  offset: number;
+}
+
 export interface Storage {
   init(): Promise<void>;
+  createActivity(entry: ActivityEntry): Promise<void>;
+  listActivity(accountId: string, query: ActivityQuery): Promise<{ entries: ActivityEntry[]; total: number }>;
+  getActivity(id: string, accountId: string): Promise<ActivityEntry | null>;
+  pruneActivity(before: number): Promise<number>;
 
   // Accounts
   getAccount(id: string): Promise<StoredAccount | null>;

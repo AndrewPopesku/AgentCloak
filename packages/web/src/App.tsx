@@ -7,6 +7,7 @@ import { LandingPage } from "./pages/LandingPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { ConnectionsPage } from "./pages/ConnectionsPage";
 import { ConnectionDetailPage } from "./pages/ConnectionDetailPage";
+import { ActivityPage } from "./pages/ActivityPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { PrivacyPage } from "./pages/PrivacyPage";
 import { TermsPage } from "./pages/TermsPage";
@@ -33,6 +34,7 @@ export function App() {
               path="/connections/:id"
               element={<ConnectionDetailPage />}
             />
+            <Route path="/activity" element={<ActivityPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
         </Routes>

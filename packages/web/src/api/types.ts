@@ -40,3 +40,37 @@ export interface FilterConfig {
   attachmentFilteringEnabled: boolean;
   allowedFolders: string[];
 }
+
+export interface MessageTrace {
+  messageId: string;
+  decision: "passed" | "redacted" | "blocked";
+  sender?: string;
+  blockReason?: string;
+  sanitizer: { htmlConverted: boolean; invisibleCharactersStripped: number };
+  piiPatterns: Record<string, number>;
+  injectionLabels: string[];
+  attachmentsStripped: number;
+}
+
+export interface ActivityEntry {
+  id: string;
+  createdAt: number;
+  connectionId: string;
+  apiKeyName: string | null;
+  apiKeyPrefix: string | null;
+  toolName: string;
+  status: "ok" | "error" | "blocked";
+  durationMs: number;
+  providerCalls: number;
+  returnedCount: number;
+  redactedCount: number;
+  blockedCount: number;
+  responseTruncated: boolean;
+  errorMessage: string | null;
+}
+
+export interface ActivityDetail extends ActivityEntry {
+  arguments: Record<string, unknown>;
+  filterTrace: MessageTrace[];
+  responseText: string;
+}

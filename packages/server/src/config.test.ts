@@ -8,6 +8,8 @@ describe("server configuration", () => {
     vi.stubEnv("HOST", undefined);
     vi.stubEnv("GMAIL_ALLOW_DRAFTS", undefined);
     vi.stubEnv("GMAIL_ALLOW_MARK_READ", undefined);
+    vi.stubEnv("ACTIVITY_LOG_ENABLED", undefined);
+    vi.stubEnv("ACTIVITY_LOG_RETENTION_DAYS", undefined);
   });
 
   afterEach(() => vi.unstubAllEnvs());
@@ -41,5 +43,14 @@ describe("server configuration", () => {
   it("rejects the public example secret", () => {
     vi.stubEnv("SESSION_SECRET", "change-me-to-a-random-string-at-least-32-chars");
     expect(() => loadConfig()).toThrow(/unique SESSION_SECRET/);
+  });
+
+  it("validates activity logging settings", () => {
+    expect(loadConfig()).toMatchObject({ activityLogEnabled: true, activityLogRetentionDays: 30 });
+    vi.stubEnv("ACTIVITY_LOG_ENABLED", "false");
+    vi.stubEnv("ACTIVITY_LOG_RETENTION_DAYS", "7");
+    expect(loadConfig()).toMatchObject({ activityLogEnabled: false, activityLogRetentionDays: 7 });
+    vi.stubEnv("ACTIVITY_LOG_RETENTION_DAYS", "0");
+    expect(() => loadConfig()).toThrow();
   });
 });
