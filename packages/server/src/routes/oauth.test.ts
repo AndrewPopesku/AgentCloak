@@ -4,7 +4,7 @@ import type { Config } from "../config.js";
 import type { Storage } from "../storage/types.js";
 import { createApiRoutes } from "./api.js";
 import { createOAuthRoutes } from "./oauth.js";
-import { exchangeCode, generateConnectAuthUrl } from "../providers/gmail/oauth.js";
+import { exchangeCode, generateConnectAuthUrl, generateReauthorizeAuthUrl } from "../providers/gmail/oauth.js";
 
 vi.mock("../providers/gmail/oauth.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../providers/gmail/oauth.js")>()),
@@ -15,7 +15,7 @@ const config: Config = {
   host: "127.0.0.1", port: 3000, databasePath: ":memory:",
   baseUrl: "https://agentcloak.example", sessionSecret: "test-secret-that-is-at-least-32-characters",
   sessionMaxAge: 600_000, googleClientId: "test-client", googleClientSecret: "test-secret",
-  googleRedirectUri: "https://agentcloak.example/auth/callback", gmailAllowDrafts: false,
+  googleRedirectUri: "https://agentcloak.example/auth/callback", gmailAllowDrafts: false, gmailAllowMarkRead: false,
 };
 
 describe("OAuth browser and account binding", () => {
@@ -97,8 +97,19 @@ describe("OAuth browser and account binding", () => {
     const readonly = new URL(generateConnectAuthUrl(config, "owner")).searchParams.get("scope")!;
     expect(readonly).toContain("gmail.readonly");
     expect(readonly).not.toContain("gmail.compose");
+    expect(readonly).not.toContain("gmail.modify");
     const drafts = new URL(generateConnectAuthUrl({ ...config, gmailAllowDrafts: true }, "owner")).searchParams.get("scope")!;
     expect(drafts).toContain("gmail.compose");
+  });
+
+  it("requests modify only for an explicit mark-read opt-in on connect and reauthorization", () => {
+    const enabled = { ...config, gmailAllowMarkRead: true };
+    for (const url of [generateConnectAuthUrl(enabled, "owner"), generateReauthorizeAuthUrl(enabled, "owner", "connection")]) {
+      const scopes = new URL(url).searchParams.get("scope")!.split(" ");
+      expect(scopes).toContain("https://www.googleapis.com/auth/gmail.modify");
+      expect(scopes).not.toContain("https://www.googleapis.com/auth/gmail.readonly");
+      expect(scopes).not.toContain("https://www.googleapis.com/auth/gmail.compose");
+    }
   });
 
   it("does not auto-link Google login to an unverified password registration", async () => {

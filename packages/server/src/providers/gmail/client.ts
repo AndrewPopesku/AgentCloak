@@ -22,6 +22,7 @@ export class GmailProvider implements EmailProvider {
   private gmail: gmail_v1.Gmail;
   private connectionId: string;
   private draftsEnabled: boolean;
+  private markReadEnabled: boolean;
 
   constructor(
     config: Config,
@@ -31,6 +32,7 @@ export class GmailProvider implements EmailProvider {
   ) {
     this.connectionId = connectionId;
     this.draftsEnabled = config.gmailAllowDrafts;
+    this.markReadEnabled = config.gmailAllowMarkRead;
     const auth = createOAuth2Client(config);
     auth.setCredentials({
       access_token: tokens.accessToken,
@@ -77,6 +79,17 @@ export class GmailProvider implements EmailProvider {
       format: "full",
     });
     return parseGmailMessage(res.data);
+  }
+
+  async markRead(messageId: string): Promise<void> {
+    if (!this.markReadEnabled) {
+      throw new Error("Marking Gmail read requires GMAIL_ALLOW_MARK_READ=true and Gmail reauthorization.");
+    }
+    await this.gmail.users.messages.modify({
+      userId: "me",
+      id: messageId,
+      requestBody: { removeLabelIds: ["UNREAD"] },
+    });
   }
 
   async listThreads(options: SearchOptions): Promise<ThreadListResult> {
@@ -169,7 +182,7 @@ export class GmailProvider implements EmailProvider {
 
   async createDraft(input: CreateDraftInput): Promise<CreateDraftResult> {
     if (!this.draftsEnabled) {
-      throw new Error("Gmail is read-only. Draft creation requires the operator to enable GMAIL_ALLOW_DRAFTS and reconnect Gmail.");
+      throw new Error("Draft creation is disabled. Enable GMAIL_ALLOW_DRAFTS and reconnect Gmail to allow drafts.");
     }
     const lines = [
       `To: ${input.to.join(", ")}`,
@@ -270,7 +283,10 @@ export class GmailProvider implements EmailProvider {
         "IMPORTANT", "CATEGORY_SOCIAL", "CATEGORY_PROMOTIONS",
         "CATEGORY_UPDATES", "CATEGORY_FORUMS",
       ],
-      limitations: this.draftsEnabled ? [] : ["Read-only Gmail access; draft creation is disabled."],
+      limitations: [
+        ...(!this.draftsEnabled ? ["Draft creation is disabled."] : []),
+        ...(!this.markReadEnabled ? ["Marking emails read is disabled."] : []),
+      ],
     };
   }
 

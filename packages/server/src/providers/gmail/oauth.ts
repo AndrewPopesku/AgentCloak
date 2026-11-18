@@ -9,10 +9,13 @@ const LOGIN_SCOPES = [
   "https://www.googleapis.com/auth/userinfo.profile",
 ];
 
-const CONNECT_SCOPES = [
-  "https://www.googleapis.com/auth/gmail.readonly",
-  "https://www.googleapis.com/auth/userinfo.email",
-];
+function connectScopes(config: Config): string[] {
+  return [
+    `https://www.googleapis.com/auth/gmail.${config.gmailAllowMarkRead ? "modify" : "readonly"}`,
+    "https://www.googleapis.com/auth/userinfo.email",
+    ...(config.gmailAllowDrafts ? ["https://www.googleapis.com/auth/gmail.compose"] : []),
+  ];
+}
 
 export type OAuthFlowType = "login" | "connect" | "reauthorize";
 
@@ -57,7 +60,7 @@ export function generateConnectAuthUrl(
   return client.generateAuthUrl({
     access_type: "offline",
     prompt: "consent",
-    scope: config.gmailAllowDrafts ? [...CONNECT_SCOPES, "https://www.googleapis.com/auth/gmail.compose"] : CONNECT_SCOPES,
+    scope: connectScopes(config),
     state,
   });
 }
@@ -73,7 +76,7 @@ export function generateReauthorizeAuthUrl(
   return client.generateAuthUrl({
     access_type: "offline",
     prompt: "consent",
-    scope: config.gmailAllowDrafts ? [...CONNECT_SCOPES, "https://www.googleapis.com/auth/gmail.compose"] : CONNECT_SCOPES,
+    scope: connectScopes(config),
     state,
   });
 }

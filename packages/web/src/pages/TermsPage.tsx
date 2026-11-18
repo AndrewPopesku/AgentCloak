@@ -85,10 +85,11 @@ export function TermsPage() {
 
           <Section title="Email Access">
             <p>
-              AgentCloak operates in read-only mode by design. Agents can search,
-              read, and create drafts, but cannot send, delete, or modify any
-              emails. Draft emails created by agents are saved to your drafts
-              folder for your review before sending.
+              Gmail access is read-only by default. Operators may explicitly enable
+              draft creation or marking permitted messages read, then reauthorize
+              with Google. These Google permissions are broader than the tools:
+              agents have no send, delete, or arbitrary-label tool. Drafts remain
+              in your drafts folder for your review before sending.
             </p>
           </Section>
 

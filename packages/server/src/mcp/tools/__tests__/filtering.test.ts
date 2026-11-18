@@ -78,6 +78,27 @@ async function tools(
 }
 
 describe("mailbox filtering through MCP", () => {
+  it("marks only the requested permitted message read without returning email content", async () => {
+    const markRead = vi.fn(async () => {});
+    const call = await tools([message({ isUnread: true, labels: ["INBOX", "UNREAD"] }), message({ id: "other" })], {}, { markRead });
+    const result = await call("mark_email_read", { message_id: "message-1" });
+    expect(result.isError).not.toBe(true);
+    expect(result.data).toEqual({ message_id: "message-1", isUnread: false });
+    expect(markRead).toHaveBeenCalledExactlyOnceWith("message-1");
+  });
+
+  it.each([
+    { subject: "Your verification code is 654321" },
+    { labels: ["TRASH"] },
+  ])("refuses to mark blocked or forbidden-folder messages read", async (overrides) => {
+    const markRead = vi.fn(async () => {});
+    const call = await tools([message(overrides)], { allowedFolders: ["INBOX"] }, { markRead });
+    const result = await call("mark_email_read", { message_id: "message-1" });
+    expect(result.isError).toBe(true);
+    expect(result.data.error).toBe("blocked");
+    expect(markRead).not.toHaveBeenCalled();
+  });
+
   it("blocks security emails in thread listings just as it does when reading", async () => {
     const call = await tools([message({ subject: "Your verification code is 654321", snippet: "654321" })]);
     expect((await call("read_email", { message_id: "message-1" })).isError).toBe(true);

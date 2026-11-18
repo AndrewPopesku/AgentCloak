@@ -98,6 +98,7 @@ export interface ProviderInfo {
 export interface EmailProvider {
   search(options: SearchOptions): Promise<SearchResult>;
   getMessage(messageId: string): Promise<EmailMessage>;
+  markRead?(messageId: string): Promise<void>;
   listThreads(options: SearchOptions): Promise<ThreadListResult>;
   getThread(threadId: string): Promise<{ thread: EmailThread; messages: EmailMessage[] }>;
   createDraft(input: CreateDraftInput): Promise<CreateDraftResult>;

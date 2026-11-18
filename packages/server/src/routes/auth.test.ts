@@ -7,7 +7,7 @@ import { createAuthRoutes } from "./auth.js";
 const config: Config = {
   host: "127.0.0.1",
   port: 3000,
-  gmailAllowDrafts: false,
+  gmailAllowDrafts: false, gmailAllowMarkRead: false,
   databasePath: ":memory:",
   baseUrl: "http://localhost:3000",
   sessionSecret: "test-session-secret-at-least-32-characters",
