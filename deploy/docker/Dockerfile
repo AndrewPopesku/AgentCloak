@@ -4,6 +4,8 @@ WORKDIR /app
 
 # Install dependencies
 FROM base AS deps
+RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ \
+    && rm -rf /var/lib/apt/lists/*
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages/server/package.json packages/server/
 COPY packages/cli/package.json packages/cli/
