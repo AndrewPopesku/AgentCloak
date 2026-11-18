@@ -11,6 +11,7 @@ const config: Config = {
   databasePath: ":memory:",
   baseUrl: "http://localhost:3000",
   sessionSecret: "test-session-secret-at-least-32-characters",
+  activityLogEnabled: true, activityLogRetentionDays: 30,
   sessionMaxAge: 60_000,
 };
 

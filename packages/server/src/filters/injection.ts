@@ -56,6 +56,7 @@ export class InjectionFilter implements EmailFilter {
       action: "redact",
       reason: `Injection patterns detected: ${uniqueDetections.join(", ")}`,
       message: sanitized,
+      trace: { injectionLabels: uniqueDetections },
     };
   }
 }

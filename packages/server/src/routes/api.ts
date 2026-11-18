@@ -34,6 +34,26 @@ export function createApiRoutes(storage: Storage, config: Config) {
     });
   });
 
+  api.get("/activity", async (c) => {
+    const limit = Number(c.req.query("limit") ?? 50);
+    const offset = Number(c.req.query("offset") ?? 0);
+    const status = c.req.query("status");
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100 || !Number.isInteger(offset) || offset < 0 || (status && !["ok", "error", "blocked"].includes(status))) {
+      return c.json({ error: "Invalid activity query" }, 400);
+    }
+    const result = await storage.listActivity(c.get("accountId"), {
+      limit, offset, connectionId: c.req.query("connection"), toolName: c.req.query("tool"),
+      status: status as "ok" | "error" | "blocked" | undefined,
+    });
+    return c.json({ total: result.total, entries: result.entries.map(({ responseText, filterTraceJson, argumentsJson, ...summary }) => summary) });
+  });
+
+  api.get("/activity/:id", async (c) => {
+    const entry = await storage.getActivity(c.req.param("id"), c.get("accountId"));
+    if (!entry) return c.json({ error: "Activity entry not found" }, 404);
+    return c.json({ ...entry, arguments: JSON.parse(entry.argumentsJson), filterTrace: JSON.parse(entry.filterTraceJson) });
+  });
+
   // GET /api/connections — List email connections
   api.get("/connections", async (c) => {
     const accountId = c.get("accountId");

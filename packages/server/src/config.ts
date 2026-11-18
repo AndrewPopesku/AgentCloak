@@ -16,6 +16,8 @@ const configSchema = z.object({
     "Generate a unique SESSION_SECRET with openssl rand -hex 32",
   ),
   sessionMaxAge: z.coerce.number().default(7 * 24 * 60 * 60 * 1000), // 7 days
+  activityLogEnabled: z.enum(["true", "false"]).default("true").transform((value) => value === "true"),
+  activityLogRetentionDays: z.coerce.number().int().min(1).max(3650).default(30),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -34,6 +36,8 @@ export function loadConfig(): Config {
     baseUrl: process.env.BASE_URL,
     sessionSecret: process.env.SESSION_SECRET,
     sessionMaxAge: process.env.SESSION_MAX_AGE,
+    activityLogEnabled: process.env.ACTIVITY_LOG_ENABLED,
+    activityLogRetentionDays: process.env.ACTIVITY_LOG_RETENTION_DAYS,
   });
 }
 

@@ -101,9 +101,10 @@ export class PiiFilter implements EmailFilter {
 
     const sanitized = { ...message };
     let wasRedacted = false;
+    const piiPatterns: Record<string, number> = {};
 
     const redact = (text: string) => {
-      const result = redactPii(text, this.emailRedactionEnabled, this.dollarAmountRedactionEnabled);
+      const result = redactPii(text, this.emailRedactionEnabled, this.dollarAmountRedactionEnabled, piiPatterns);
       wasRedacted ||= result !== text;
       return result;
     };
@@ -118,11 +119,12 @@ export class PiiFilter implements EmailFilter {
       action: wasRedacted ? "redact" : "pass",
       reason: wasRedacted ? "PII patterns redacted" : undefined,
       message: sanitized,
+      trace: { piiPatterns },
     };
   }
 }
 
-function redactPii(text: string, emailRedaction: boolean, dollarAmountRedaction: boolean): string {
+function redactPii(text: string, emailRedaction: boolean, dollarAmountRedaction: boolean, counts: Record<string, number>): string {
   let result = text;
   const patterns: PiiPattern[] = [...PII_PATTERNS];
   if (dollarAmountRedaction) {
@@ -131,10 +133,13 @@ function redactPii(text: string, emailRedaction: boolean, dollarAmountRedaction:
   if (emailRedaction) {
     patterns.push(EMAIL_ADDRESS_PATTERN);
   }
-  for (const { pattern, replacement } of patterns) {
+  for (const { name, pattern, replacement } of patterns) {
     // Reset regex lastIndex for global patterns
     pattern.lastIndex = 0;
-    result = result.replace(pattern, replacement);
+    result = result.replace(pattern, () => {
+      counts[name] = (counts[name] ?? 0) + 1;
+      return replacement;
+    });
   }
   return result;
 }

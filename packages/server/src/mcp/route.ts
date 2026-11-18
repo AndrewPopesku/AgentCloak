@@ -7,7 +7,8 @@ import { GasProvider } from "../providers/gas/client.js";
 import { GmailProvider } from "../providers/gmail/client.js";
 import { ImapProvider } from "../providers/imap/client.js";
 import type { EmailProvider } from "../providers/types.js";
-import type { GasCredentials, ImapCredentials, OAuthTokens, Storage, StoredEmailConnection } from "../storage/types.js";
+import type { GasCredentials, ImapCredentials, OAuthTokens, Storage, StoredEmailConnection, StoredApiKey } from "../storage/types.js";
+import { instrumentProvider, instrumentTools } from "./activity.js";
 import { registerAllTools } from "./tools/index.js";
 
 export async function handleMcpRequest(
@@ -16,6 +17,7 @@ export async function handleMcpRequest(
   connectionId: string,
   storage: Storage,
   config: Config,
+  apiKey?: StoredApiKey,
 ): Promise<void> {
   // Load connection
   const connection = await storage.getConnection(connectionId);
@@ -46,12 +48,12 @@ export async function handleMcpRequest(
   });
 
   // Create provider and pipeline for this connection
-  const provider = createProvider(connection, config, storage);
+  const provider = instrumentProvider(createProvider(connection, config, storage));
   const filterConfig = await storage.getFilterConfig(connectionId);
   const pipeline = new FilterPipeline(filterConfig);
 
   // Register tools
-  registerAllTools(mcpServer, provider, pipeline);
+  registerAllTools(instrumentTools(mcpServer, pipeline, storage, connection, apiKey, config), provider, pipeline);
 
   // Create stateless transport
   const transport = new StreamableHTTPServerTransport({

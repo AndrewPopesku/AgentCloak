@@ -6,6 +6,17 @@ import { PiiFilter } from "./pii.js";
 import { SanitizerFilter } from "./sanitizer.js";
 import type { EmailFilter, FilterResult } from "./types.js";
 
+export interface MessageTrace {
+  messageId: string;
+  decision: "passed" | "redacted" | "blocked";
+  sender?: string;
+  blockReason?: string;
+  sanitizer: { htmlConverted: boolean; invisibleCharactersStripped: number };
+  piiPatterns: Record<string, number>;
+  injectionLabels: string[];
+  attachmentsStripped: number;
+}
+
 export class FilterPipeline {
   private filters: EmailFilter[];
   public readonly showFilteredCount: boolean;
@@ -13,6 +24,7 @@ export class FilterPipeline {
   public readonly blockedDomains: string[];
   public readonly attachmentFilteringEnabled: boolean;
   public readonly allowedFolders: string[];
+  public onTrace?: (trace: MessageTrace) => void;
 
   constructor(userConfig?: StoredFilterConfig | null) {
     this.showFilteredCount = userConfig?.showFilteredCount ?? true;
@@ -38,6 +50,19 @@ export class FilterPipeline {
   }
 
   process(message: EmailMessage): FilterResult {
+    return this.processWithTrace(message).result;
+  }
+
+  processWithTrace(message: EmailMessage): { result: FilterResult; trace: MessageTrace } {
+    const trace: MessageTrace = {
+      messageId: message.id, decision: "passed",
+      sanitizer: { htmlConverted: false, invisibleCharactersStripped: 0 },
+      piiPatterns: {}, injectionLabels: [], attachmentsStripped: 0,
+    };
+    const finish = (result: FilterResult) => {
+      this.onTrace?.(trace);
+      return { result, trace };
+    };
     // Folder restriction: block messages not in allowed folders
     if (this.allowedFolders.length > 0) {
       const allowed = this.allowedFolders.map((f) => f.toLowerCase());
@@ -46,11 +71,14 @@ export class FilterPipeline {
         allowed.includes(label.toLowerCase()),
       );
       if (!hasAllowedFolder) {
-        return {
+        trace.decision = "blocked";
+        trace.sender = message.from.email;
+        trace.blockReason = "Folder not in allowed list";
+        return finish({
           action: "block",
           reason: "Folder not in allowed list",
           message,
-        };
+        });
       }
     }
 
@@ -60,18 +88,32 @@ export class FilterPipeline {
       const result = filter.filter(current);
 
       if (result.action === "block") {
-        return result;
+        trace.decision = "blocked";
+        trace.sender = message.from.email;
+        trace.blockReason = result.reason;
+        return finish(result);
       }
+
+      if (filter.name === "sanitizer") {
+        trace.sanitizer = {
+          htmlConverted: result.trace?.htmlConverted ?? false,
+          invisibleCharactersStripped: result.trace?.invisibleCharactersStripped ?? 0,
+        };
+      }
+      if (filter.name === "pii") trace.piiPatterns = result.trace?.piiPatterns ?? {};
+      if (filter.name === "injection") trace.injectionLabels = result.trace?.injectionLabels ?? [];
+      if (result.action === "redact") trace.decision = "redacted";
 
       current = result.message;
     }
 
     // Attachment filtering: strip attachment metadata
     if (this.attachmentFilteringEnabled) {
+      trace.attachmentsStripped = current.attachments.length;
       current = { ...current, attachments: [] };
     }
 
-    return { action: "pass", message: current };
+    return finish({ action: "pass", message: current });
   }
 
   processBatch(messages: EmailMessage[]): {

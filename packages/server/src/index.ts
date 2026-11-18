@@ -24,11 +24,14 @@ async function main() {
 
   // Clean up expired sessions on startup
   await storage.deleteExpiredSessions();
+  const pruneActivity = () => storage.pruneActivity(Date.now() - config.activityLogRetentionDays * 86_400_000).catch(console.error);
+  await pruneActivity();
   // Periodic cleanup every hour
   setInterval(
     () => storage.deleteExpiredSessions().catch(console.error),
     60 * 60 * 1000,
   );
+  setInterval(pruneActivity, 60 * 60 * 1000);
 
   const app = new Hono();
 
@@ -166,6 +169,7 @@ async function main() {
           storedKey.connectionId,
           storage,
           config,
+          storedKey,
         );
       } catch (err) {
         console.error("MCP request failed:", err);
