@@ -18,14 +18,21 @@ export function registerListDrafts(
     async ({ max_results }) => {
       const result = await provider.listDrafts(max_results);
 
-      const drafts = result.drafts.map((d) => ({
-        id: d.id,
-        messageId: d.messageId,
-        to: formatAddresses(d.to, pipeline),
-        subject: d.subject,
-        snippet: d.snippet,
-        updatedAt: d.updatedAt,
-      }));
+      const drafts = [];
+      for (const draft of result.drafts) {
+        const message = await provider.getMessage(draft.messageId);
+        const filtered = pipeline.process(message);
+        if (filtered.action === "block") continue;
+        const sanitized = filtered.message;
+        drafts.push({
+          id: draft.id,
+          messageId: sanitized.id,
+          to: formatAddresses(sanitized.to, pipeline),
+          subject: sanitized.subject,
+          snippet: sanitized.snippet,
+          updatedAt: sanitized.date,
+        });
+      }
 
       return {
         content: [

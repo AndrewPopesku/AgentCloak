@@ -197,9 +197,9 @@ async function main() {
     honoListener(req, res);
   });
 
-  server.listen(config.port, () => {
+  server.listen(config.port, config.host, () => {
     console.log(
-      `AgentCloak server running on http://localhost:${config.port}`,
+      `AgentCloak server listening on ${config.host}:${config.port}`,
     );
     console.log(`MCP endpoint: http://localhost:${config.port}/mcp`);
     console.log(`Dashboard: http://localhost:${config.port}`);

@@ -102,19 +102,17 @@ export class PiiFilter implements EmailFilter {
     const sanitized = { ...message };
     let wasRedacted = false;
 
-    const redact = (text: string) =>
-      redactPii(text, this.emailRedactionEnabled, this.dollarAmountRedactionEnabled);
+    const redact = (text: string) => {
+      const result = redactPii(text, this.emailRedactionEnabled, this.dollarAmountRedactionEnabled);
+      wasRedacted ||= result !== text;
+      return result;
+    };
     sanitized.body = redact(sanitized.body);
     sanitized.subject = redact(sanitized.subject);
     sanitized.snippet = redact(sanitized.snippet);
-
-    if (
-      sanitized.body !== message.body ||
-      sanitized.subject !== message.subject ||
-      sanitized.snippet !== message.snippet
-    ) {
-      wasRedacted = true;
-    }
+    sanitized.from = { ...message.from, name: redact(message.from.name) };
+    sanitized.to = message.to.map((address) => ({ ...address, name: redact(address.name) }));
+    sanitized.cc = message.cc.map((address) => ({ ...address, name: redact(address.name) }));
 
     return {
       action: wasRedacted ? "redact" : "pass",

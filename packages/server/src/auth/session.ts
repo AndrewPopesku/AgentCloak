@@ -33,7 +33,7 @@ export function sessionMiddleware(storage: Storage, config: Config) {
 }
 
 export async function createSessionAndSetCookie(
-  c: { header: (name: string, value: string) => void },
+  c: { header: (name: string, value: string, options?: { append?: boolean }) => void },
   storage: Storage,
   config: Config,
   accountId: string,
@@ -59,7 +59,7 @@ export async function createSessionAndSetCookie(
     `Max-Age=${maxAgeSecs}`,
   ];
   if (secure) parts.push("Secure");
-  c.header("Set-Cookie", parts.join("; "));
+  c.header("Set-Cookie", parts.join("; "), { append: true });
 
   return sessionId;
 }

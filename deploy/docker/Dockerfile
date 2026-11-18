@@ -33,6 +33,7 @@ COPY --from=build /app/packages/cli/package.json packages/cli/
 COPY --from=deps /app/packages/cli/node_modules packages/cli/node_modules
 
 ENV NODE_ENV=production
+ENV HOST=0.0.0.0
 ENV DATABASE_PATH=/app/data/agentcloak.db
 
 EXPOSE 3000

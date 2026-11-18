@@ -22,8 +22,8 @@ export class FilterPipeline {
     const blocklist = new BlocklistFilter(userConfig);
     this.blockedDomains = blocklist.getBlockedDomains();
     this.filters = [
-      blocklist,
       new SanitizerFilter(),
+      blocklist,
       new PiiFilter(
         userConfig?.piiRedactionEnabled ?? true,
         userConfig?.emailRedactionEnabled ?? true,

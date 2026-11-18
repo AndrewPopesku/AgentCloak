@@ -11,7 +11,6 @@ const LOGIN_SCOPES = [
 
 const CONNECT_SCOPES = [
   "https://www.googleapis.com/auth/gmail.readonly",
-  "https://www.googleapis.com/auth/gmail.compose",
   "https://www.googleapis.com/auth/userinfo.email",
 ];
 
@@ -58,7 +57,7 @@ export function generateConnectAuthUrl(
   return client.generateAuthUrl({
     access_type: "offline",
     prompt: "consent",
-    scope: CONNECT_SCOPES,
+    scope: config.gmailAllowDrafts ? [...CONNECT_SCOPES, "https://www.googleapis.com/auth/gmail.compose"] : CONNECT_SCOPES,
     state,
   });
 }
@@ -74,7 +73,7 @@ export function generateReauthorizeAuthUrl(
   return client.generateAuthUrl({
     access_type: "offline",
     prompt: "consent",
-    scope: CONNECT_SCOPES,
+    scope: config.gmailAllowDrafts ? [...CONNECT_SCOPES, "https://www.googleapis.com/auth/gmail.compose"] : CONNECT_SCOPES,
     state,
   });
 }
@@ -101,8 +100,8 @@ export async function exchangeCode(
   const oauth2 = google.oauth2({ version: "v2", auth: client });
   const { data } = await oauth2.userinfo.get();
 
-  if (!data.email) {
-    throw new Error("Could not retrieve email from Google user info");
+  if (!data.email || !data.verified_email) {
+    throw new Error("Could not retrieve a verified email from Google user info");
   }
 
   return {
@@ -112,7 +111,7 @@ export async function exchangeCode(
       expiresAt: tokens.expiry_date ?? Date.now() + 3600 * 1000,
       scope: tokens.scope ?? "",
     },
-    email: data.email,
+    email: data.email.trim().toLowerCase(),
     name: data.name ?? null,
     avatarUrl: data.picture ?? null,
   };
@@ -145,7 +144,7 @@ export function verifyState(
 
   // Check expiry
   const stateTime = parseInt(timestamp!, 36);
-  if (Number.isNaN(stateTime) || Date.now() - stateTime > STATE_MAX_AGE_MS) {
+  if (Number.isNaN(stateTime) || stateTime > Date.now() || Date.now() - stateTime > STATE_MAX_AGE_MS) {
     return null;
   }
 

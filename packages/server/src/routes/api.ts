@@ -6,6 +6,7 @@ import type { Config } from "../config.js";
 import { isGoogleOAuthConfigured } from "../config.js";
 import { createApiKey } from "../auth/keys.js";
 import { sessionMiddleware, type SessionEnv } from "../auth/session.js";
+import { setOAuthStateCookie } from "../auth/oauth-state.js";
 import { GasProvider } from "../providers/gas/client.js";
 import { generateGasScript } from "../providers/gas/script-template.js";
 import { encryptPassword } from "../providers/imap/crypto.js";
@@ -56,6 +57,7 @@ export function createApiRoutes(storage: Storage, config: Config) {
     }
     const accountId = c.get("accountId");
     const url = generateConnectAuthUrl(config, accountId);
+    setOAuthStateCookie(c, url, config);
     return c.redirect(url);
   });
 
@@ -77,6 +79,7 @@ export function createApiRoutes(storage: Storage, config: Config) {
     }
 
     const url = generateReauthorizeAuthUrl(config, accountId, connectionId);
+    setOAuthStateCookie(c, url, config);
     return c.redirect(url);
   });
 

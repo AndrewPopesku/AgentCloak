@@ -2,23 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { FilterPipeline } from "../../filters/pipeline.js";
 import type { EmailProvider } from "../../providers/types.js";
-import type { EmailThread } from "../../providers/types.js";
-import { formatAddresses } from "./format.js";
-
-function isThreadBlocked(thread: EmailThread, pipeline: FilterPipeline): boolean {
-  // Check if all participants are from blocked domains
-  // A thread is blocked only if every participant domain is blocked
-  // (mixed threads with non-blocked participants are kept)
-  const blockedDomains = pipeline.blockedDomains;
-  if (blockedDomains.length === 0) return false;
-
-  const allBlocked = thread.participants.length > 0 && thread.participants.every((p) => {
-    const domain = p.email.toLowerCase().split("@")[1] ?? "";
-    return blockedDomains.some((d) => domain === d || domain.endsWith(`.${d}`));
-  });
-
-  return allBlocked;
-}
+import { formatThread } from "./format.js";
 
 export function registerListThreads(
   server: McpServer,
@@ -41,24 +25,16 @@ export function registerListThreads(
       });
 
       let blockedCount = 0;
-      const summaries = result.threads
-        .filter((t) => {
-          if (isThreadBlocked(t, pipeline)) {
-            blockedCount++;
-            return false;
-          }
-          return true;
-        })
-        .map((t) => ({
-          id: t.id,
-          subject: t.subject,
-          participants: formatAddresses(t.participants, pipeline),
-          messageCount: t.messageCount,
-          snippet: t.snippet,
-          lastMessageDate: t.lastMessageDate,
-          isUnread: t.isUnread,
-          labels: t.labels,
-        }));
+      const summaries = [];
+      for (const thread of result.threads) {
+        const messages = thread.messages ?? (await provider.getThread(thread.id)).messages;
+        const { passed } = pipeline.processBatch(messages);
+        if (passed.length === 0) {
+          blockedCount++;
+          continue;
+        }
+        summaries.push(formatThread(thread.id, passed, pipeline));
+      }
 
       const response: Record<string, unknown> = {
         threads: summaries,

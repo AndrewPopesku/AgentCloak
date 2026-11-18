@@ -99,6 +99,7 @@ export interface Storage {
   // Accounts
   getAccount(id: string): Promise<StoredAccount | null>;
   getAccountByEmail(email: string): Promise<StoredAccount | null>;
+  createAccount(account: StoredAccount): Promise<boolean>;
   upsertAccount(account: StoredAccount): Promise<void>;
   updateAccountPasswordHash(id: string, passwordHash: string): Promise<void>;
 

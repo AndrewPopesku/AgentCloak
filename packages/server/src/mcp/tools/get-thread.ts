@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { FilterPipeline } from "../../filters/pipeline.js";
 import type { EmailProvider } from "../../providers/types.js";
-import { formatAddress, formatAddresses } from "./format.js";
+import { formatAddress, formatAddresses, formatThread } from "./format.js";
 
 export function registerGetThread(
   server: McpServer,
@@ -18,6 +18,13 @@ export function registerGetThread(
     async ({ thread_id }) => {
       const { thread, messages } = await provider.getThread(thread_id);
       const { passed, blocked } = pipeline.processBatch(messages);
+      if (passed.length === 0) {
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify({ error: "blocked", thread_id }) }],
+          isError: true,
+        };
+      }
+      const summary = formatThread(thread.id, passed, pipeline);
 
       const sanitizedMessages = passed.map((m) => ({
         id: m.id,
@@ -31,9 +38,9 @@ export function registerGetThread(
 
       const response: Record<string, unknown> = {
         threadId: thread.id,
-        subject: thread.subject,
-        participants: formatAddresses(thread.participants, pipeline),
-        messageCount: thread.messageCount,
+        subject: summary.subject,
+        participants: summary.participants,
+        messageCount: summary.messageCount,
         messages: sanitizedMessages,
       };
       if (pipeline.showFilteredCount && blocked.length > 0) {

@@ -30,6 +30,6 @@
     "onlyBuiltDependencies": ["better-sqlite3", "esbuild"]
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   }
 }

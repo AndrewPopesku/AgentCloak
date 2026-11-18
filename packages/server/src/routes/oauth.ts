@@ -1,6 +1,7 @@
 import { getCookie } from "hono/cookie";
 import { Hono } from "hono";
 import { nanoid } from "nanoid";
+import { consumeOAuthStateCookie, setOAuthStateCookie } from "../auth/oauth-state.js";
 import type { Config } from "../config.js";
 import { isGoogleOAuthConfigured } from "../config.js";
 import {
@@ -23,6 +24,7 @@ export function createOAuthRoutes(storage: Storage, config: Config) {
       return c.redirect("/login?error=google_not_configured");
     }
     const url = generateLoginAuthUrl(config);
+    setOAuthStateCookie(c, url, config);
     return c.redirect(url);
   });
 
@@ -44,8 +46,16 @@ export function createOAuthRoutes(storage: Storage, config: Config) {
     }
 
     const verified = verifyState(state, config.sessionSecret);
-    if (!verified) {
+    if (!verified || !consumeOAuthStateCookie(c, state)) {
       return c.redirect("/?error=invalid_state");
+    }
+
+    if (verified.flow !== "login") {
+      const sid = getCookie(c, "sid");
+      const session = sid ? await storage.getSession(sid) : null;
+      if (!session || session.accountId !== verified.accountId) {
+        return c.redirect("/login?error=session_expired");
+      }
     }
 
     let result;
@@ -59,10 +69,14 @@ export function createOAuthRoutes(storage: Storage, config: Config) {
     if (verified.flow === "login") {
       // Dashboard login flow
       const existing = await storage.getAccountByEmail(result.email);
+      // Password registrations have not proved ownership of their email address.
+      if (existing?.passwordHash) {
+        return c.redirect("/login?error=use_password_to_sign_in");
+      }
       const accountId = existing?.id ?? nanoid(21);
       const now = Date.now();
 
-      await storage.upsertAccount({
+      const account = {
         id: accountId,
         email: result.email,
         name: result.name,
@@ -70,7 +84,12 @@ export function createOAuthRoutes(storage: Storage, config: Config) {
         passwordHash: null,
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
-      });
+      };
+      if (existing) {
+        await storage.upsertAccount(account);
+      } else if (!(await storage.createAccount(account))) {
+        return c.redirect("/login?error=account_already_exists");
+      }
 
       // Re-fetch to get the actual ID in case of race condition on upsert
       const finalAccount = await storage.getAccountByEmail(result.email);
@@ -135,6 +154,9 @@ export function createOAuthRoutes(storage: Storage, config: Config) {
       const conn = await storage.getConnection(connectionId);
       if (!conn || conn.accountId !== accountId) {
         return c.redirect("/connections?error=invalid_connection");
+      }
+      if (conn.provider !== "gmail" || conn.email.toLowerCase() !== result.email.toLowerCase()) {
+        return c.redirect("/connections?error=email_mismatch");
       }
 
       // Update tokens on the existing connection

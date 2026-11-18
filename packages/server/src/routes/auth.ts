@@ -27,7 +27,7 @@ export function createAuthRoutes(storage: Storage, config: Config) {
     });
   });
 
-  // POST /auth/register — Create account or add password to existing OAuth account
+  // POST /auth/register — Create a new email/password account
   routes.post("/register", rateLimiter, async (c) => {
     const body = await c.req.json<{
       email?: string;
@@ -51,47 +51,34 @@ export function createAuthRoutes(storage: Storage, config: Config) {
 
     const existing = await storage.getAccountByEmail(email);
 
-    if (existing && existing.passwordHash) {
+    if (existing) {
       return c.json({ error: "Account already exists" }, 409);
     }
 
     const passwordHash = await hashPassword(password);
 
-    if (existing) {
-      // OAuth-only account — add password
-      await storage.updateAccountPasswordHash(existing.id, passwordHash);
-      await createSessionAndSetCookie(c, storage, config, existing.id);
-      return c.json({
-        id: existing.id,
-        email: existing.email,
-        name: existing.name,
-        avatarUrl: existing.avatarUrl,
-      });
-    }
-
-    // New account
-    const accountId = nanoid(21);
     const now = Date.now();
-    await storage.upsertAccount({
-      id: accountId,
+    const account = {
+      id: nanoid(21),
       email,
       name,
       avatarUrl: null,
       passwordHash,
       createdAt: now,
       updatedAt: now,
-    });
+    };
 
-    // Re-fetch to get actual ID (in case of race on upsert)
-    const account = await storage.getAccountByEmail(email);
-    await createSessionAndSetCookie(c, storage, config, account!.id);
+    if (!(await storage.createAccount(account))) {
+      return c.json({ error: "Account already exists" }, 409);
+    }
+    await createSessionAndSetCookie(c, storage, config, account.id);
 
     return c.json(
       {
-        id: account!.id,
-        email: account!.email,
-        name: account!.name,
-        avatarUrl: account!.avatarUrl,
+        id: account.id,
+        email: account.email,
+        name: account.name,
+        avatarUrl: account.avatarUrl,
       },
       201,
     );

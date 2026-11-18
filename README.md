@@ -1,16 +1,15 @@
 # AgentCloak
 
 [![License: BSL 1.1](https://img.shields.io/badge/License-BSL%201.1-yellow.svg)](LICENSE)
-[![Try it](https://img.shields.io/badge/Try%20it-agentcloak.up.railway.app-emerald)](https://agentcloak.up.railway.app/)
 [![MCP](https://img.shields.io/badge/Protocol-MCP-blue)](https://modelcontextprotocol.io)
 
-> **Don't want to set it up yourself?** Try the hosted version at [agentcloak.up.railway.app](https://agentcloak.up.railway.app/)
+> This personal fork contains security fixes beyond upstream. Run this checkout locally; those fixes do not apply to upstream's hosted service.
 
 A source-available proxy service that sits between AI agents and your email. AgentCloak holds OAuth tokens, IMAP credentials, and Apps Script secrets server-side, filters sensitive content, redacts PII and email addresses, and sanitizes for prompt injection — so agents can safely triage, summarize, and draft emails without seeing things they shouldn't.
 
 ## Key Safety Features
 
-- **Read-only by design** — Agents can search, read, and create drafts. They cannot send, delete, trash, or modify any emails.
+- **Read-only Gmail by default** — Gmail OAuth requests read-only access. Draft creation is disabled unless `GMAIL_ALLOW_DRAFTS=true` is explicitly set and Gmail is reconnected. Google's additional `gmail.compose` scope permits both drafting and sending, although this app exposes no send tool. Other providers' credentials may also have broader permissions than the tools expose.
 - **Sensitive email blocking** — Emails from financial institutions, security senders, and government agencies are blocked before the agent ever sees them. Blocking is split into independently toggleable categories: security emails (password resets, 2FA codes, login alerts), financial emails (bank statements, payments, tax docs), and sensitive senders (security@, fraud@, .gov addresses). 40+ domains, 13 sender patterns, and 50+ subject patterns are included by default.
 - **PII redaction** — SSNs, credit card numbers, account numbers, routing numbers, API keys, and large dollar amounts are replaced with `[REDACTED]` placeholders. Dollar amount redaction can be toggled independently.
 - **Email address redaction** — Email addresses are stripped from all structured fields (`from`, `to`, `cc`, `participants`) and replaced with display names only. Addresses in email body text are redacted as `[EMAIL_REDACTED]`. This prevents agents from exfiltrating contact information to external systems.
@@ -31,7 +30,7 @@ AI Agent (Claude Code, OpenClaw, any MCP client)
   ▼
 AgentCloak Server
   ├── 7 MCP tools (search, read, threads, drafts, labels)
-  ├── Content filter pipeline (blocklist → sanitizer → PII → injection)
+  ├── Content filter pipeline (sanitizer → blocklist → PII → injection)
   ├── Attachment filtering & folder restriction
   ├── Email address redaction (structured fields + body text)
   ├── Gmail provider (OAuth2, token refresh)
@@ -44,8 +43,8 @@ AgentCloak Server
 Agents connect via MCP over HTTP with an API key. Every email passes through a four-stage filter pipeline before reaching the agent:
 
 1. **Folder restriction** — If allowed folders are configured, messages outside those folders are blocked before any other processing.
-2. **Blocklist** — Blocks emails from financial institutions, government agencies, and security senders. Each category (security, financial, sensitive sender) can be toggled independently. Custom blocked domains and subject patterns are always applied.
-3. **Sanitizer** — Converts HTML to plaintext, strips dangerous Unicode (zero-width chars, bidi overrides, tag characters).
+2. **Sanitizer** — Converts HTML to plaintext, strips dangerous Unicode (zero-width chars, bidi overrides, tag characters) before matching security rules.
+3. **Blocklist** — Blocks emails from financial institutions, government agencies, and security senders. Each category (security, financial, sensitive sender) can be toggled independently. Custom blocked domains and subject patterns are always applied.
 4. **PII Redaction** — Replaces SSNs, credit card numbers, account numbers, API keys, and email addresses with `[REDACTED]` placeholders. Dollar amount redaction is independently toggleable.
 5. **Injection Detection** — Detects prompt injection patterns in email content and prepends warnings (does not block).
 6. **Attachment filtering** — When enabled, strips attachment metadata from the output so agents cannot see filenames, types, or sizes.
@@ -82,7 +81,7 @@ agentcloak/
 
 ### Prerequisites
 
-- **Node.js 20+** and **pnpm 10+**
+- **Node.js 22+** and **pnpm 10+**
 - **IMAP credentials** (optional) — If connecting a non-Gmail account via IMAP, you'll need the IMAP host, port, and an app-specific password from your email provider.
 
 > **Tip:** Google OAuth is entirely optional. You can sign in to the dashboard with email/password and connect email via IMAP or Apps Script — no Google Cloud project needed. Only set up Google OAuth if you want "Sign in with Google" on the dashboard or want to connect a Gmail account via OAuth.
@@ -90,7 +89,7 @@ agentcloak/
 ### 1. Install
 
 ```bash
-git clone https://github.com/ryanfren/AgentCloak.git
+git clone https://github.com/AndrewPopesku/AgentCloak.git
 cd agentcloak
 pnpm install
 ```
@@ -126,10 +125,9 @@ If you don't need either, skip to [step 3](#3-configure-environment).
    - `https://www.googleapis.com/auth/userinfo.email`
    - `https://www.googleapis.com/auth/userinfo.profile`
    - `https://www.googleapis.com/auth/gmail.readonly`
-   - `https://www.googleapis.com/auth/gmail.compose`
 
    Click **Update**, then **Save and Continue**.
-   > The first three scopes are used for dashboard login. The last two are used when connecting a Gmail account (read emails + create drafts).
+   > The first three scopes are used for dashboard login. Gmail connections request read-only access by default. Only add `https://www.googleapis.com/auth/gmail.compose` if you explicitly opt into drafts with `GMAIL_ALLOW_DRAFTS=true`; Google also grants permission to send with this scope.
 10. On the **Test users** page, click **Add Users** and add the **Gmail address(es)** you want to access through AgentCloak. This is required — only listed test users can sign in while the app is in testing mode.
 
     Click **Save and Continue**, then **Back to Dashboard**.
@@ -163,6 +161,7 @@ SESSION_SECRET=change-me-to-a-random-string-at-least-32-chars
 # Server
 BASE_URL=http://localhost:3000
 PORT=3000
+HOST=127.0.0.1
 
 # Optional — Google OAuth credentials (only needed for Google sign-in and Gmail OAuth connections)
 # GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
@@ -171,6 +170,12 @@ PORT=3000
 ```
 
 Without the Google OAuth variables, the dashboard shows only email/password sign-in. With them, both methods are available.
+
+The server listens only on your computer by default. Container or hosted deployments must set `HOST=0.0.0.0`; the Docker Compose example still publishes the port only on the host's loopback interface.
+
+Gmail tokens are encrypted with AES-256-GCM using `SESSION_SECRET`, like IMAP and Apps Script secrets. Keep that secret private and backed up separately from the database; changing it makes existing credentials unreadable. Legacy plaintext Gmail records are encrypted on startup, but old backups and SQLite journal pages can still contain earlier plaintext. Revoke existing Google grants and reconnect if upgrading from an earlier installation, especially to remove previously granted compose access. The standard SQLite driver rejects `DATABASE_ENCRYPTION_KEY` rather than silently ignoring it; credential encryption does not encrypt the entire database.
+
+Google sign-in does not automatically link to an existing password account because registration does not verify email ownership. Use that account's password to sign in, then connect Gmail from its dashboard.
 
 ### 4. Build and start the server
 
@@ -334,6 +339,7 @@ AgentCloak can be deployed to [Railway](https://railway.com) for multi-tenant cl
    railway variables set SESSION_SECRET="$(openssl rand -hex 32)"
    railway variables set BASE_URL="https://your-app.up.railway.app"
    railway variables set PORT=3000
+   railway variables set HOST=0.0.0.0
    railway variables set DATABASE_PATH=/app/data/agentcloak.db
    ```
 
@@ -477,7 +483,8 @@ The generated script contains a secret that authenticates requests between Agent
 ## Current Limitations
 
 - **No attachment content access.** Attachment metadata (filename, type, size) is available when attachment filtering is disabled, but actual file content is not accessible. This is a security-conscious default — attachments like PDFs and images could contain sensitive information that bypasses text-based filters.
-- **No send capability.** Agents can create drafts but cannot send emails. This is intentional.
+- **No send tool.** Gmail is read-only by default. Enabling drafts grants the server a Google permission that can also send mail; the app's tools still only expose draft creation.
+- **Filters reduce exposure, not guarantee isolation.** Pattern-based redaction and injection warnings can miss unfamiliar formats and attacks. Treat email content as untrusted even when a filter passes it.
 - **Single-user per API key.** Each API key maps to one email connection.
 - **Regex-based PII detection.** PII redaction uses pattern matching, not ML. Some formats may be missed.
 

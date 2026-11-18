@@ -161,7 +161,7 @@ export class ImapProvider implements EmailProvider {
         }
 
         // Build threads, sorted by most recent message
-        const threads: EmailThread[] = [];
+        const threads: ThreadListResult["threads"] = [];
         for (const [, entry] of threadMap) {
           entry.messages.sort(
             (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
@@ -182,6 +182,7 @@ export class ImapProvider implements EmailProvider {
             lastMessageDate: latest.date,
             labels: [...new Set(entry.messages.flatMap((m) => m.labels))],
             isUnread: entry.messages.some((m) => m.isUnread),
+            messages: [...entry.messages].reverse(),
           });
         }
 

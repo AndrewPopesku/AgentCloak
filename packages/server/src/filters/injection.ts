@@ -31,7 +31,7 @@ export class InjectionFilter implements EmailFilter {
       return { action: "pass", message };
     }
 
-    const textToScan = `${message.subject}\n${message.body}`;
+    const textToScan = `${message.subject}\n${message.body}\n${message.snippet}`;
     const detections: string[] = [];
 
     for (const { pattern, label } of INJECTION_PATTERNS) {
@@ -50,6 +50,7 @@ export class InjectionFilter implements EmailFilter {
 
     const sanitized = { ...message };
     sanitized.body = `${warning}\n\n${sanitized.body}`;
+    sanitized.snippet = `${warning}\n\n${sanitized.snippet}`;
 
     return {
       action: "redact",

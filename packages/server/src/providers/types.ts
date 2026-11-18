@@ -66,7 +66,7 @@ export interface SearchResult {
 }
 
 export interface ThreadListResult {
-  threads: EmailThread[];
+  threads: Array<EmailThread & { messages?: EmailMessage[] }>;
   nextPageToken?: string;
   resultSizeEstimate: number;
 }

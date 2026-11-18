@@ -60,22 +60,8 @@ export async function handleMcpRequest(
 
   await mcpServer.connect(transport);
 
-  // Parse body from the raw request
-  const body = await new Promise<unknown>((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    req.on("data", (chunk: Buffer) => chunks.push(chunk));
-    req.on("end", () => {
-      try {
-        resolve(JSON.parse(Buffer.concat(chunks).toString()));
-      } catch (e) {
-        reject(e);
-      }
-    });
-    req.on("error", reject);
-  });
-
-  // Handle the MCP request — transport writes directly to res
-  await transport.handleRequest(req, res, body);
+  // Let the SDK enforce its 4 MiB body and 100-message batch limits before parsing.
+  await transport.handleRequest(req, res);
 }
 
 function createProvider(

@@ -1,10 +1,13 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { FilterPipeline } from "../../filters/pipeline.js";
 import type { EmailProvider } from "../../providers/types.js";
+import { threadParticipants } from "./format.js";
 
 export function registerCreateDraft(
   server: McpServer,
   provider: EmailProvider,
+  pipeline: FilterPipeline,
 ) {
   server.tool(
     "create_draft",
@@ -18,10 +21,18 @@ export function registerCreateDraft(
     async ({ to, subject, body, in_reply_to_thread_id }) => {
       let recipients = to ?? [];
 
-      // Auto-populate recipients from thread if replying and no explicit recipients
-      if (in_reply_to_thread_id && recipients.length === 0) {
-        const { thread } = await provider.getThread(in_reply_to_thread_id);
-        recipients = thread.participants.map((p) => p.email);
+      if (in_reply_to_thread_id) {
+        const { messages } = await provider.getThread(in_reply_to_thread_id);
+        const { passed } = pipeline.processBatch(messages);
+        if (passed.length === 0) {
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify({ error: "blocked", thread_id: in_reply_to_thread_id }) }],
+            isError: true,
+          };
+        }
+        if (recipients.length === 0) {
+          recipients = threadParticipants(passed).map((p) => p.email);
+        }
       }
 
       if (recipients.length === 0) {

@@ -4,13 +4,14 @@ services:
       context: ../..
       dockerfile: deploy/docker/Dockerfile
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     volumes:
       - agentcloak-data:/app/data
     env_file:
       - ../../.env
     environment:
       - PORT=3000
+      - HOST=0.0.0.0
       - DATABASE_PATH=/app/data/agentcloak.db
     restart: unless-stopped
 

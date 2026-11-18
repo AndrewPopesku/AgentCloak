@@ -21,6 +21,7 @@ import { parseEmailAddress, parseGmailMessage } from "./parser.js";
 export class GmailProvider implements EmailProvider {
   private gmail: gmail_v1.Gmail;
   private connectionId: string;
+  private draftsEnabled: boolean;
 
   constructor(
     config: Config,
@@ -29,6 +30,7 @@ export class GmailProvider implements EmailProvider {
     storage: Storage,
   ) {
     this.connectionId = connectionId;
+    this.draftsEnabled = config.gmailAllowDrafts;
     const auth = createOAuth2Client(config);
     auth.setCredentials({
       access_token: tokens.accessToken,
@@ -166,6 +168,9 @@ export class GmailProvider implements EmailProvider {
   }
 
   async createDraft(input: CreateDraftInput): Promise<CreateDraftResult> {
+    if (!this.draftsEnabled) {
+      throw new Error("Gmail is read-only. Draft creation requires the operator to enable GMAIL_ALLOW_DRAFTS and reconnect Gmail.");
+    }
     const lines = [
       `To: ${input.to.join(", ")}`,
       `Subject: ${input.subject}`,
@@ -265,7 +270,7 @@ export class GmailProvider implements EmailProvider {
         "IMPORTANT", "CATEGORY_SOCIAL", "CATEGORY_PROMOTIONS",
         "CATEGORY_UPDATES", "CATEGORY_FORUMS",
       ],
-      limitations: [],
+      limitations: this.draftsEnabled ? [] : ["Read-only Gmail access; draft creation is disabled."],
     };
   }
 

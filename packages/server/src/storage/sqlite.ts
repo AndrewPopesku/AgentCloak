@@ -1,7 +1,8 @@
 import Database from "better-sqlite3";
 import { createHash } from "node:crypto";
-import { mkdirSync } from "node:fs";
+import { chmodSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import { decryptPassword, encryptPassword } from "../providers/imap/crypto.js";
 import type {
   ConnectionCredentials,
   ConnectionStatus,
@@ -18,11 +19,16 @@ const CURRENT_SCHEMA_VERSION = 5;
 export class SqliteStorage implements Storage {
   private db: Database.Database;
 
-  constructor(dbPath: string, encryptionKey?: string) {
-    mkdirSync(dirname(dbPath), { recursive: true });
+  constructor(dbPath: string, encryptionKey?: string, private credentialSecret?: string) {
+    mkdirSync(dirname(dbPath), { recursive: true, mode: 0o700 });
     this.db = new Database(dbPath);
+    if (dbPath !== ":memory:") chmodSync(dbPath, 0o600);
 
     if (encryptionKey) {
+      if (!this.db.pragma("cipher_version", { simple: true })) {
+        this.db.close();
+        throw new Error("DATABASE_ENCRYPTION_KEY requires an encryption-capable SQLite driver; standard better-sqlite3 cannot encrypt the database.");
+      }
       const sanitized = encryptionKey.replace(/'/g, "''");
       this.db.pragma(`key = '${sanitized}'`);
     }
@@ -54,6 +60,16 @@ export class SqliteStorage implements Storage {
       this.migrateFromV4ToV5();
     }
     // version >= 5: already up to date
+    if (this.credentialSecret) {
+      const rows = this.db.prepare("SELECT id, tokens_json FROM email_connections WHERE provider = 'gmail'").all() as { id: string; tokens_json: string }[];
+      const update = this.db.prepare("UPDATE email_connections SET tokens_json = ? WHERE id = ?");
+      this.db.transaction(() => {
+        for (const row of rows) {
+          const tokens = JSON.parse(row.tokens_json);
+          if (tokens.type !== "encrypted-oauth") update.run(this.serializeCredentials(tokens), row.id);
+        }
+      })();
+    }
   }
 
   private getSchemaVersion(): number {
@@ -386,6 +402,25 @@ export class SqliteStorage implements Storage {
     return row ? this.rowToAccount(row) : null;
   }
 
+  async createAccount(account: StoredAccount): Promise<boolean> {
+    const result = this.db
+      .prepare(
+        `INSERT INTO accounts (id, email, name, avatar_url, password_hash, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(email) DO NOTHING`,
+      )
+      .run(
+        account.id,
+        account.email,
+        account.name,
+        account.avatarUrl,
+        account.passwordHash,
+        account.createdAt,
+        account.updatedAt,
+      );
+    return result.changes === 1;
+  }
+
   async upsertAccount(account: StoredAccount): Promise<void> {
     this.db
       .prepare(
@@ -449,7 +484,7 @@ export class SqliteStorage implements Storage {
         conn.email,
         conn.provider,
         conn.displayName,
-        JSON.stringify(conn.tokens),
+        this.serializeCredentials(conn.tokens),
         conn.status,
         conn.createdAt,
         conn.updatedAt,
@@ -464,7 +499,7 @@ export class SqliteStorage implements Storage {
       .prepare(
         "UPDATE email_connections SET tokens_json = ?, updated_at = ? WHERE id = ?",
       )
-      .run(JSON.stringify(tokens), Date.now(), id);
+      .run(this.serializeCredentials(tokens), Date.now(), id);
   }
 
   async updateConnectionStatus(
@@ -667,6 +702,19 @@ export class SqliteStorage implements Storage {
 
   // ── Row mappers ──
 
+  private serializeCredentials(tokens: ConnectionCredentials): string {
+    if (!("accessToken" in tokens)) return JSON.stringify(tokens);
+    if (!this.credentialSecret) throw new Error("OAuth credential encryption requires SESSION_SECRET");
+    return JSON.stringify({ type: "encrypted-oauth", ...encryptPassword(JSON.stringify(tokens), this.credentialSecret) });
+  }
+
+  private deserializeCredentials(json: string): ConnectionCredentials {
+    const stored = JSON.parse(json);
+    if (stored.type !== "encrypted-oauth") return stored;
+    if (!this.credentialSecret) throw new Error("OAuth credential decryption requires SESSION_SECRET");
+    return JSON.parse(decryptPassword(stored.encryptedPassword, stored.iv, stored.authTag, this.credentialSecret));
+  }
+
   private rowToAccount(row: Record<string, unknown>): StoredAccount {
     return {
       id: row.id as string,
@@ -688,7 +736,7 @@ export class SqliteStorage implements Storage {
       email: row.email as string,
       provider: row.provider as string,
       displayName: (row.display_name as string) ?? null,
-      tokens: JSON.parse(row.tokens_json as string),
+      tokens: this.deserializeCredentials(row.tokens_json as string),
       status: row.status as ConnectionStatus,
       createdAt: row.created_at as number,
       updatedAt: row.updated_at as number,
