@@ -7,12 +7,13 @@ describe("server configuration", () => {
     vi.stubEnv("SESSION_SECRET", "test-session-secret-at-least-32-characters");
     vi.stubEnv("HOST", undefined);
     vi.stubEnv("GMAIL_ALLOW_DRAFTS", undefined);
+    vi.stubEnv("GMAIL_ALLOW_MARK_READ", undefined);
   });
 
   afterEach(() => vi.unstubAllEnvs());
 
   it("binds only to loopback and keeps Gmail read-only by default", () => {
-    expect(loadConfig()).toMatchObject({ host: "127.0.0.1", gmailAllowDrafts: false });
+    expect(loadConfig()).toMatchObject({ host: "127.0.0.1", gmailAllowDrafts: false, gmailAllowMarkRead: false });
   });
 
   it("allows an explicit container bind and Gmail draft opt-in", () => {
@@ -25,6 +26,15 @@ describe("server configuration", () => {
     vi.stubEnv("GMAIL_ALLOW_DRAFTS", "false");
     expect(loadConfig()).toMatchObject({ gmailAllowDrafts: false });
     vi.stubEnv("GMAIL_ALLOW_DRAFTS", "yes");
+    expect(() => loadConfig()).toThrow();
+  });
+
+  it("requires a strict explicit mark-read opt-in", () => {
+    vi.stubEnv("GMAIL_ALLOW_MARK_READ", "true");
+    expect(loadConfig().gmailAllowMarkRead).toBe(true);
+    vi.stubEnv("GMAIL_ALLOW_MARK_READ", "false");
+    expect(loadConfig().gmailAllowMarkRead).toBe(false);
+    vi.stubEnv("GMAIL_ALLOW_MARK_READ", "yes");
     expect(() => loadConfig()).toThrow();
   });
 

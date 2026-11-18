@@ -9,6 +9,7 @@ const configSchema = z.object({
   googleClientSecret: z.string().min(1).optional(),
   googleRedirectUri: z.string().url().optional(),
   gmailAllowDrafts: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
+  gmailAllowMarkRead: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
   baseUrl: z.string().url(),
   sessionSecret: z.string().min(32).refine(
     (secret) => secret !== "change-me-to-a-random-string-at-least-32-chars",
@@ -29,6 +30,7 @@ export function loadConfig(): Config {
     googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,
     googleRedirectUri: process.env.GOOGLE_REDIRECT_URI,
     gmailAllowDrafts: process.env.GMAIL_ALLOW_DRAFTS,
+    gmailAllowMarkRead: process.env.GMAIL_ALLOW_MARK_READ,
     baseUrl: process.env.BASE_URL,
     sessionSecret: process.env.SESSION_SECRET,
     sessionMaxAge: process.env.SESSION_MAX_AGE,

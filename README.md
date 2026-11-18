@@ -9,7 +9,7 @@ A source-available proxy service that sits between AI agents and your email. Age
 
 ## Key Safety Features
 
-- **Read-only Gmail by default** — Gmail OAuth requests read-only access. Draft creation is disabled unless `GMAIL_ALLOW_DRAFTS=true` is explicitly set and Gmail is reconnected. Google's additional `gmail.compose` scope permits both drafting and sending, although this app exposes no send tool. Other providers' credentials may also have broader permissions than the tools expose.
+- **Read-only Gmail by default** — Gmail OAuth requests read-only access. Draft creation is disabled unless `GMAIL_ALLOW_DRAFTS=true` is explicitly set and Gmail is reconnected. Google's additional `gmail.compose` scope permits both drafting and sending, although this app exposes no send tool. Set `GMAIL_ALLOW_MARK_READ=true` and reauthorize to allow marking individual permitted messages read. This requires Google's broader `gmail.modify` scope, which also permits sending and other mailbox changes; the new tool only removes `UNREAD`. Other providers' credentials may also have broader permissions than the tools expose.
 - **Sensitive email blocking** — Emails from financial institutions, security senders, and government agencies are blocked before the agent ever sees them. Blocking is split into independently toggleable categories: security emails (password resets, 2FA codes, login alerts), financial emails (bank statements, payments, tax docs), and sensitive senders (security@, fraud@, .gov addresses). 40+ domains, 13 sender patterns, and 50+ subject patterns are included by default.
 - **PII redaction** — SSNs, credit card numbers, account numbers, routing numbers, API keys, and large dollar amounts are replaced with `[REDACTED]` placeholders. Dollar amount redaction can be toggled independently.
 - **Email address redaction** — Email addresses are stripped from all structured fields (`from`, `to`, `cc`, `participants`) and replaced with display names only. Addresses in email body text are redacted as `[EMAIL_REDACTED]`. This prevents agents from exfiltrating contact information to external systems.
@@ -29,7 +29,7 @@ AI Agent (Claude Code, OpenClaw, any MCP client)
   │  MCP Streamable HTTP + API key
   ▼
 AgentCloak Server
-  ├── 7 MCP tools (search, read, threads, drafts, labels)
+  ├── MCP tools (search, read, mark read, threads, drafts, labels, provider info)
   ├── Content filter pipeline (sanitizer → blocklist → PII → injection)
   ├── Attachment filtering & folder restriction
   ├── Email address redaction (structured fields + body text)
@@ -56,12 +56,14 @@ In addition to body-level filtering, all structured fields (`from`, `to`, `cc`, 
 | Tool | Description |
 |------|-------------|
 | `search_emails` | Search by query, returns filtered summaries |
-| `read_email` | Read full email content (sanitized) |
+| `read_email` | Read full email content (sanitized; does not change read status) |
+| `mark_email_read` | Gmail only: mark one filtered, permitted message read. Requires `GMAIL_ALLOW_MARK_READ=true` and reauthorization. |
 | `list_threads` | List threads matching a query |
 | `get_thread` | Get all messages in a thread (each sanitized) |
 | `create_draft` | Create a draft (not sent — user must review). Thread replies auto-populate recipients server-side. |
 | `list_drafts` | List existing drafts |
 | `list_labels` | List labels with unread counts (respects folder restrictions) |
+| `get_provider_info` | Provider capabilities and limitations |
 
 ## Project Structure
 
@@ -128,6 +130,7 @@ If you don't need either, skip to [step 3](#3-configure-environment).
 
    Click **Update**, then **Save and Continue**.
    > The first three scopes are used for dashboard login. Gmail connections request read-only access by default. Only add `https://www.googleapis.com/auth/gmail.compose` if you explicitly opt into drafts with `GMAIL_ALLOW_DRAFTS=true`; Google also grants permission to send with this scope.
+   > To enable marking individual messages read, set `GMAIL_ALLOW_MARK_READ=true`, add `https://www.googleapis.com/auth/gmail.modify`, and reauthorize. Google does not offer a read-flag-only scope for this operation; `gmail.modify` also permits sending and other mailbox changes. Draft creation remains separately disabled, and no send/delete/arbitrary-label tool is exposed.
 10. On the **Test users** page, click **Add Users** and add the **Gmail address(es)** you want to access through AgentCloak. This is required — only listed test users can sign in while the app is in testing mode.
 
     Click **Save and Continue**, then **Back to Dashboard**.
@@ -485,7 +488,7 @@ The generated script contains a secret that authenticates requests between Agent
 ## Current Limitations
 
 - **No attachment content access.** Attachment metadata (filename, type, size) is available when attachment filtering is disabled, but actual file content is not accessible. This is a security-conscious default — attachments like PDFs and images could contain sensitive information that bypasses text-based filters.
-- **No send tool.** Gmail is read-only by default. Enabling drafts grants the server a Google permission that can also send mail; the app's tools still only expose draft creation.
+- **No send or delete tool.** Gmail is read-only by default. Opting into drafts or marking messages read grants broader Google permissions, including sending. The app restricts these operations to draft creation and/or removal of `UNREAD`, according to the operator's explicit configuration. The mark-read tool enforces the same content and folder filters as reading.
 - **Filters reduce exposure, not guarantee isolation.** Pattern-based redaction and injection warnings can miss unfamiliar formats and attacks. Treat email content as untrusted even when a filter passes it.
 - **Single-user per API key.** Each API key maps to one email connection.
 - **Regex-based PII detection.** PII redaction uses pattern matching, not ML. Some formats may be missed.
@@ -528,7 +531,7 @@ The generated script contains a secret that authenticates requests between Agent
 
 1. **Attachment reading** — Unlocks invoice processing, contract review, reading forwarded PDFs. Probably the single biggest capability gap. Requires a `read_attachment` tool with PDF/document text extraction run through the filter pipeline.
 
-2. **Email organization** — Labeling, archiving, starring, marking read/unread. Right now the agent can tell you what to do but can't actually clean up your inbox. Adding `modify_labels` and `archive` tools with confirmation would enable inbox-zero workflows.
+2. **Email organization** — Labeling, archiving, starring, and marking unread. The optional Gmail mark-read tool only removes `UNREAD` from individual permitted messages. Adding `modify_labels` and `archive` tools with confirmation would enable inbox-zero workflows.
 
 3. **Scheduled digests** — "Every morning at 7am, summarize overnight emails and send me a Slack message." Requires a scheduler (cron) and an outbound integration. Turns AgentCloak from reactive to proactive.
 

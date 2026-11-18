@@ -9,7 +9,7 @@ const BODY_LIMIT = 4 * 1024 * 1024;
 const config: Config = {
   port: 3000,
   host: "127.0.0.1",
-  gmailAllowDrafts: false,
+  gmailAllowDrafts: false, gmailAllowMarkRead: false,
   googleClientId: "test-client-id",
   googleClientSecret: "test-client-secret",
   googleRedirectUri: "http://localhost:3000/auth/callback",
