@@ -133,7 +133,7 @@ export function ConnectionDetailPage() {
   const filterInfo: Record<string, { title: string; body: string }> = {
     piiRedaction: {
       title: "PII Redaction",
-      body: "Automatically scans email content and redacts personally identifiable information before it reaches AI agents. This includes Social Security numbers, credit card numbers, API keys and tokens (Stripe, AWS, Bearer tokens), bank account and routing numbers, and PEM private keys. Redacted values are replaced with placeholders like [SSN_REDACTED] so the agent knows something was removed without seeing the sensitive data.",
+      body: "Automatically scans email content and redacts personally identifiable information before it reaches AI agents. This includes Social Security numbers, credit card numbers, valid IBANs, labeled Ukrainian taxpayer numbers, phone numbers, API keys and tokens (Stripe, AWS, Bearer tokens), bank account and routing numbers, and PEM private keys. Redacted values are replaced with placeholders like [SSN_REDACTED] so the agent knows something was removed without seeing the sensitive data.",
     },
     emailRedaction: {
       title: "Email Address Redaction",
@@ -160,8 +160,8 @@ export function ConnectionDetailPage() {
       body: "Blocks emails from sender addresses that match security-sensitive patterns. This includes addresses like security@, fraud@, verify@, authentication@, and noreply addresses from government domains (.gov), banks, and financial institutions. These senders typically send authentication tokens, security alerts, or financial notifications that should not be accessible to AI agents.",
     },
     dollarAmountRedaction: {
-      title: "Dollar Amount Redaction",
-      body: "Redacts large dollar amounts (formatted as $X,XXX.XX or larger) found in email content, replacing them with [AMOUNT_REDACTED]. This is separate from the main PII redaction toggle so you can control financial amount visibility independently. Only amounts with comma separators ($1,000.00 and above) are redacted\u2014smaller amounts like $9.99 pass through.",
+      title: "Money Amount Redaction",
+      body: "Redacts amounts of 1,000 or more with supported currency symbols or codes, including dollars, euros, pounds, hryvnia, and zloty. Smaller amounts remain visible. This switch applies when PII redaction is enabled.",
     },
     attachmentFiltering: {
       title: "Attachment Filtering",
@@ -384,8 +384,8 @@ export function ConnectionDetailPage() {
               onInfo={() => showInfo("sensitiveSenderBlocking")}
             />
             <Toggle
-              label="Dollar Amount Redaction"
-              description="Redact large dollar amounts ($X,XXX.XX) in email content"
+              label="Redact money amounts"
+              description="Redact currency amounts of 1,000 or more"
               enabled={filters.dollarAmountRedactionEnabled}
               onChange={(v) =>
                 handleFilterToggle("dollarAmountRedactionEnabled", v)

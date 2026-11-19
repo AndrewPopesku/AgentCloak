@@ -212,3 +212,47 @@ describe("BlocklistFilter", () => {
     });
   });
 });
+
+describe("Localized built-in blocklist rules", () => {
+  const financialDomains = [
+    "monobank.ua", "privatbank.ua", "pumb.ua", "oschadbank.ua",
+    "raiffeisen.ua", "sensebank.com.ua", "ukrsibbank.com", "a-bank.com.ua",
+    "izibank.com.ua", "diia.gov.ua", "tax.gov.ua", "revolut.com",
+    "wise.com", "n26.com", "bunq.com",
+  ];
+
+  it.each(financialDomains)("blocks financial mail from %s under the financial switch", (domain) => {
+    const msg = makeMessage({ from: { name: "Bank", email: `updates@${domain}` }, subject: "Hello" });
+    expect(new BlocklistFilter().filter(msg).action).toBe("block");
+    expect(new BlocklistFilter(makeFilterConfig({ financialBlockingEnabled: false, sensitiveSenderBlockingEnabled: false })).filter(msg).action).toBe("pass");
+  });
+
+  it("does not block lookalike financial domains", () => {
+    expect(new BlocklistFilter().filter(makeMessage({ from: { name: "Shop", email: "hello@fake-revolut.com" } })).action).toBe("pass");
+  });
+
+  const securitySubjects = [
+    "Код підтвердження входу", "Одноразовий пароль для входу",
+    "Скидання пароля", "Зміна пароля", "Вхід в обліковий запис",
+    "Новий пристрій у вашому акаунті", "Двофакторна автентифікація",
+    "Код подтверждения", "Сброс пароля",
+  ];
+  it.each(securitySubjects)("blocks security subject: %s", (subject) => {
+    expect(new BlocklistFilter().filter(makeMessage({ subject })).action).toBe("block");
+    expect(new BlocklistFilter(makeFilterConfig({ securityBlockingEnabled: false })).filter(makeMessage({ subject })).action).toBe("pass");
+  });
+
+  const financialSubjects = [
+    "Банківська виписка з рахунку", "Квитанція про оплату",
+    "Платіж підтверджено", "Підтвердження переказу",
+    "Грошовий переказ коштів", "Податкова декларація",
+  ];
+  it.each(financialSubjects)("blocks financial subject: %s", (subject) => {
+    expect(new BlocklistFilter().filter(makeMessage({ subject })).action).toBe("block");
+    expect(new BlocklistFilter(makeFilterConfig({ financialBlockingEnabled: false })).filter(makeMessage({ subject })).action).toBe("pass");
+  });
+
+  it.each(["Новини магазину", "Ваше замовлення доставлено", "Квитанція за концерт", "Платіжний календар подій", "Підтвердження участі у вебінарі"])("passes ordinary Ukrainian subject: %s", (subject) => {
+    expect(new BlocklistFilter().filter(makeMessage({ subject })).action).toBe("pass");
+  });
+});
