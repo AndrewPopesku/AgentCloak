@@ -234,3 +234,47 @@ describe("PiiFilter", () => {
     });
   });
 });
+
+describe("Localized PII rules", () => {
+  it.each(["UA213223130000026007233566001", "UA21 3223 1300 0002 6007 2335 6600 1", "GB82 WEST 1234 5698 7654 32"])("redacts a checksum-valid IBAN: %s", (iban) => {
+    expect(new PiiFilter().filter(makeMessage({ body: `IBAN: ${iban}` })).message.body).toContain("[IBAN_REDACTED]");
+  });
+
+  it.each(["UA22 3223 1300 0002 6007 2335 6600 1", "GB83 WEST 1234 5698 7654 32"])("leaves an invalid IBAN visible: %s", (iban) => {
+    expect(new PiiFilter().filter(makeMessage({ body: `IBAN: ${iban}` })).message.body).toContain(iban);
+  });
+
+  it.each(["РНОКПП: 1234567890", "ІПН 1234567890", "ідентифікаційний код № 1234567890", "tax ID: 1234567890"])("redacts labeled Ukrainian tax ID: %s", (body) => {
+    expect(new PiiFilter().filter(makeMessage({ body })).message.body).toContain("[TAX_ID_REDACTED]");
+  });
+
+  it("leaves bare ten-digit numbers and order numbers visible", () => {
+    const body = "1234567890; order 123456789012; tracking 123456789012345";
+    expect(new PiiFilter().filter(makeMessage({ body })).message.body).toBe(body);
+  });
+
+  it.each(["+380 67 123 45 67", "+44 20 7946 0958", "067 123 45 67", "(067) 123 45 67"])("redacts a phone: %s", (phone) => {
+    expect(new PiiFilter().filter(makeMessage({ body: `Телефон: ${phone}` })).message.body).toContain("[PHONE_REDACTED]");
+  });
+
+  it("keeps dates, times, tracking numbers, and prices intact", () => {
+    const body = "14.11.2026; 2026-11-14; 12:30; tracking 123456789012; 99 грн";
+    expect(new PiiFilter().filter(makeMessage({ body })).message.body).toBe(body);
+  });
+
+  it("keeps card numbers as credit cards, without phone redaction", () => {
+    const body = new PiiFilter().filter(makeMessage({ body: "Card: 4111 1111 1111 1111" })).message.body;
+    expect(body).toContain("[CREDIT_CARD_REDACTED]");
+    expect(body).not.toContain("[PHONE_REDACTED]");
+  });
+
+  it.each(["€1.234,56", "1 234,56 грн", "1234 UAH", "£2,000.00", "₴2 500", "2 500 EUR", "1,000 USD", "1 234 PLN", "1 234 zł"])("redacts a large currency amount: %s", (amount) => {
+    expect(new PiiFilter().filter(makeMessage({ body: `Balance: ${amount}` })).message.body).toContain("[AMOUNT_REDACTED]");
+    expect(new PiiFilter(true, true, false).filter(makeMessage({ body: amount })).message.body).toBe(amount);
+  });
+
+  it("respects the main PII switch", () => {
+    const body = "РНОКПП: 1234567890, +380 67 123 45 67, €1.234,56";
+    expect(new PiiFilter(false).filter(makeMessage({ body })).message.body).toBe(body);
+  });
+});

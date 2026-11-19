@@ -5,6 +5,7 @@ interface PiiPattern {
   name: string;
   pattern: RegExp;
   replacement: string;
+  validate?: (value: string) => boolean;
 }
 
 const PII_PATTERNS: PiiPattern[] = [
@@ -17,6 +18,31 @@ const PII_PATTERNS: PiiPattern[] = [
     name: "Credit Card",
     pattern: /\b(?:4\d{3}|5[1-5]\d{2}|3[47]\d{2}|6(?:011|5\d{2}))[- ]?\d{4}[- ]?\d{4}[- ]?\d{3,4}\b/g,
     replacement: "[CREDIT_CARD_REDACTED]",
+  },
+  {
+    name: "IBAN",
+    pattern: /(?<![\p{L}\p{N}])[A-Z]{2}\d{2}(?: ?[A-Z0-9]){11,30}(?![\p{L}\p{N}])/giu,
+    replacement: "[IBAN_REDACTED]",
+    validate: validIban,
+  },
+  {
+    name: "Ukrainian Taxpayer Number",
+    pattern: /(?<![\p{L}\p{N}])(?:РНОКПП|ІПН|ідентифікаційний\s+код|tax\s*ID)\s*[:№#-]?\s*\d{10}(?![\p{L}\p{N}])/giu,
+    replacement: "[TAX_ID_REDACTED]",
+  },
+  {
+    name: "Phone Number (international)",
+    pattern: /(?<![\p{L}\p{N}])\+(?:\d[ .-]?){8,15}(?![\p{L}\p{N}])/giu,
+    replacement: "[PHONE_REDACTED]",
+    validate: (value) => {
+      const digits = value.replace(/\D/g, "");
+      return digits.length >= 9 && digits.length <= 15;
+    },
+  },
+  {
+    name: "Phone Number (Ukrainian)",
+    pattern: /(?<![\p{L}\p{N}])(?:0[3-9]\d|\(0[3-9]\d\))(?:[ .-]?\d){7}(?![\p{L}\p{N}])/giu,
+    replacement: "[PHONE_REDACTED]",
   },
   {
     name: "PEM Private Key",
@@ -69,6 +95,33 @@ const PII_PATTERNS: PiiPattern[] = [
     replacement: "[ROUTING_NUMBER_REDACTED]",
   },
 ];
+
+// ISO 13616: move the four-character prefix to the end, then compute mod 97
+// incrementally so large IBANs never overflow a JavaScript number.
+function validIban(value: string): boolean {
+  const iban = value.replace(/ /g, "").toUpperCase();
+  if (iban.length < 15 || iban.length > 34) return false;
+  const rearranged = iban.slice(4) + iban.slice(0, 4);
+  let remainder = 0;
+  for (const char of rearranged) {
+    const expanded = /[A-Z]/.test(char) ? String(char.charCodeAt(0) - 55) : char;
+    for (const digit of expanded) remainder = (remainder * 10 + Number(digit)) % 97;
+  }
+  return remainder === 1;
+}
+
+const CURRENCY_AMOUNT_PATTERN: PiiPattern = {
+  name: "Currency Amount",
+  // An explicit currency marker and at least four integer digits are required.
+  // The final two digits after a comma or dot are cents; values below 1,000 pass.
+  pattern: /(?<![\p{L}\p{N}])(?:[$€£₴]|грн|UAH|EUR|USD|PLN|zł)\s*(?:\d{1,3}(?:[ .,]\d{3})+|\d{4,})(?:[.,]\d{2})?(?![\p{L}\p{N}])|(?<![\p{L}\p{N}])(?:\d{1,3}(?:[ .,]\d{3})+|\d{4,})(?:[.,]\d{2})?\s*(?:[$€£₴]|грн|UAH|EUR|USD|PLN|zł)(?![\p{L}\p{N}])/giu,
+  replacement: "[AMOUNT_REDACTED]",
+  validate: (value) => {
+    const numeric = value.replace(/(?:[$€£₴]|грн|UAH|EUR|USD|PLN|zł)/giu, "").trim();
+    const integer = numeric.replace(/[.,]\d{2}$/, "").replace(/[ .,]/g, "");
+    return Number(integer) >= 1000;
+  },
+};
 
 const DOLLAR_AMOUNT_PATTERN: PiiPattern = {
   name: "Dollar Amount (large)",
@@ -126,15 +179,15 @@ function redactPii(text: string, emailRedaction: boolean, dollarAmountRedaction:
   let result = text;
   const patterns: PiiPattern[] = [...PII_PATTERNS];
   if (dollarAmountRedaction) {
-    patterns.push(DOLLAR_AMOUNT_PATTERN);
+    patterns.push(DOLLAR_AMOUNT_PATTERN, CURRENCY_AMOUNT_PATTERN);
   }
   if (emailRedaction) {
     patterns.push(EMAIL_ADDRESS_PATTERN);
   }
-  for (const { pattern, replacement } of patterns) {
+  for (const { pattern, replacement, validate } of patterns) {
     // Reset regex lastIndex for global patterns
     pattern.lastIndex = 0;
-    result = result.replace(pattern, replacement);
+    result = result.replace(pattern, (value) => validate && !validate(value) ? value : replacement);
   }
   return result;
 }

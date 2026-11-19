@@ -49,6 +49,23 @@ const FINANCIAL_BLOCKED_DOMAINS = [
   // Government financial
   "irs.gov",
   "ssa.gov",
+  // Ukrainian banks and government financial services
+  "monobank.ua",
+  "privatbank.ua",
+  "pumb.ua",
+  "oschadbank.ua",
+  "raiffeisen.ua",
+  "sensebank.com.ua",
+  "ukrsibbank.com",
+  "a-bank.com.ua",
+  "izibank.com.ua",
+  "diia.gov.ua",
+  "tax.gov.ua",
+  // European banks and payment providers
+  "revolut.com",
+  "wise.com",
+  "n26.com",
+  "bunq.com",
 ];
 
 // Sensitive sender patterns (security/verification senders)
@@ -139,6 +156,30 @@ const FINANCIAL_SUBJECT_PATTERNS = [
   "subscription receipt",
 ];
 
+// New built-ins use Unicode-aware boundaries. Custom regexes retain their original /i compilation.
+const SECURITY_SUBJECT_PATTERNS_UK = [
+  "код\\s+(?:підтвердження|верифікації|перевірки|доступу|входу)",
+  "(?:одноразовий|тимчасовий)\\s+(?:код|пароль)",
+  "(?:скидання|зміна|відновлення)\\s+парол[яю]",
+  "(?:вхід|спроба\\s+входу)\\s+(?:в|до)\\s+(?:обліковий\\s+запис|акаунт)",
+  "(?:новий\\s+пристрій|вхід\\s+з\\s+нового\\s+пристрою)",
+  "(?:двофакторна|двохфакторна)\\s+автентифікація",
+  "(?:код\\s+подтверждения|одноразовый\\s+пароль|сброс\\s+пароля|вход\\s+с\\s+нового\\s+устройства|двухфакторная\\s+аутентификация)",
+];
+
+const FINANCIAL_SUBJECT_PATTERNS_UK = [
+  "(?:банківська\\s+)?виписка(?:\\s+(?:з|по)\\s+рахунку)?",
+  "(?:квитанція|чек)\\s+(?:про|за|щодо)\\s+(?:оплату|платіж|переказ)",
+  "(?:платіж|оплату)\\s+(?:підтверджено|отримано|проведено|успішно\\s+здійснено)",
+  "підтвердження\\s+(?:платежу|оплати|переказу)",
+  "(?:грошовий\\s+)?переказ\\s+(?:коштів|підтверджено|виконано)",
+  "(?:податкова\\s+(?:декларація|квитанція)|податкове\\s+повідомлення|довідка\\s+про\\s+доходи)",
+];
+
+function unicodeSubject(pattern: string): RegExp {
+  return new RegExp(`(?<![\\p{L}\\p{N}])(?:${pattern})(?![\\p{L}\\p{N}])`, "iu");
+}
+
 export class BlocklistFilter implements EmailFilter {
   name = "blocklist";
   private blockedDomains: string[];
@@ -176,6 +217,12 @@ export class BlocklistFilter implements EmailFilter {
     this.subjectPatterns = subjectStrs
       .map((p) => safeRegExp(p))
       .filter((r): r is RegExp => r !== null);
+    if (userConfig?.securityBlockingEnabled !== false) {
+      this.subjectPatterns.push(...SECURITY_SUBJECT_PATTERNS_UK.map(unicodeSubject));
+    }
+    if (userConfig?.financialBlockingEnabled !== false) {
+      this.subjectPatterns.push(...FINANCIAL_SUBJECT_PATTERNS_UK.map(unicodeSubject));
+    }
   }
 
   getBlockedDomains(): string[] {

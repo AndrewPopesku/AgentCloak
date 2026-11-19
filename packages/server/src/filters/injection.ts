@@ -16,6 +16,17 @@ const INJECTION_PATTERNS = [
   { pattern: /respond\s+with(out)?\s+(the|any)\s+(restrictions?|filter)/i, label: "restriction bypass" },
   { pattern: /pretend\s+(you\s+are|to\s+be)\s+/i, label: "role reassignment" },
   { pattern: /act\s+as\s+(if|though)?\s*(an?|my)\s+/i, label: "role reassignment" },
+  // Locale rules use Unicode-aware boundaries around whole Cyrillic phrases.
+  { pattern: /(?<![\p{L}\p{N}])(?:ігноруй|ігноруйте|забудь|забудьте)\s+(?:усі\s+)?(?:попередні|попередніші)\s+інструкції(?![\p{L}\p{N}])/iu, label: "instruction override" },
+  { pattern: /(?<![\p{L}\p{N}])(?:ти|ви)\s+тепер\s+(?:є\s+)?(?:асистент|помічник|системний\s+адміністратор)(?![\p{L}\p{N}])/iu, label: "role reassignment" },
+  { pattern: /(?<![\p{L}\p{N}])(?:виконай|виконайте)\s+(?:цю\s+)?команду(?![\p{L}\p{N}])/iu, label: "command execution" },
+  { pattern: /(?<![\p{L}\p{N}])(?:перешли|перешліть|надішли|надішліть)\s+(?:усі\s+)?(?:листи|повідомлення|дані)\s+(?:на|до)(?![\p{L}\p{N}])/iu, label: "data exfiltration" },
+  { pattern: /(?<![\p{L}\p{N}])нові\s+інструкції\s*:/iu, label: "instruction injection" },
+  { pattern: /(?<![\p{L}\p{N}])(?:обійди|обійдіть|вимкни|вимкніть)\s+(?:фільтр\s+безпеки|політику\s+безпеки)(?![\p{L}\p{N}])/iu, label: "safety bypass" },
+  { pattern: /(?<![\p{L}\p{N}])(?:відповідай|відповідайте)\s+без\s+(?:обмежень|фільтрів)(?![\p{L}\p{N}])/iu, label: "restriction bypass" },
+  { pattern: /(?<![\p{L}\p{N}])(?:удавай|удавайте)\s+що\s+ти\s+(?:є\s+)?(?:асистент|адміністратор)(?![\p{L}\p{N}])/iu, label: "role reassignment" },
+  { pattern: /(?<![\p{L}\p{N}])(?:игнорируй|игнорируйте)\s+(?:все\s+)?предыдущие\s+инструкции(?![\p{L}\p{N}])/iu, label: "instruction override" },
+  { pattern: /(?<![\p{L}\p{N}])(?:выполни|выполните)\s+(?:эту\s+)?команду(?![\p{L}\p{N}])/iu, label: "command execution" },
 ];
 
 export class InjectionFilter implements EmailFilter {
